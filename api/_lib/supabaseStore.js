@@ -21,12 +21,16 @@ export function getSupabaseConfig(env = process.env) {
 }
 
 function sbHeaders(key, extra = {}) {
-  return {
+  const headers = {
     apikey: key,
-    Authorization: `Bearer ${key}`,
     'Content-Type': 'application/json',
     ...extra
   };
+  // Chaves JWT legadas (eyJ...) usam Authorization: Bearer; novas chaves opacas (sb_secret_ / sb_publishable_) usam apenas apikey
+  if (String(key).startsWith('eyJ')) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+  return headers;
 }
 
 export async function loadSupabaseState(fetchImpl = globalThis.fetch, env = process.env) {

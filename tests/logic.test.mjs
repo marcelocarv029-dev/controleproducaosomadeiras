@@ -349,7 +349,7 @@ test('Marcenaria lança produto novo com foto e Conferência cadastra automatica
 test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de versão', async () => {
   const env = {
     SUPABASE_URL: 'https://demo.supabase.co',
-    SUPABASE_SERVICE_ROLE_KEY: 'service-secret'
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_test_key'
   };
   const cfg = getSupabaseConfig(env);
   assert.equal(cfg.configured, true);
@@ -366,6 +366,8 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
   let forceConflictOnce = true;
 
   const mockFetch = async (url, init = {}) => {
+    assert.equal(init.headers.apikey, 'sb_secret_test_key');
+    assert.equal(init.headers.Authorization, undefined);
     const method = (init.method || 'GET').toUpperCase();
     if (method === 'GET' && url.includes('/rest/v1/cp_state?id=eq.main')) {
       return {
