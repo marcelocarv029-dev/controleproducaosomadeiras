@@ -4,8 +4,15 @@ import { applySyncOp } from '../../public/js/logic.js';
 const STATE_ID = 'main';
 
 export function getSupabaseConfig(env = process.env) {
-  const url = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
-  const key = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || '');
+  const url = String(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+  const key = String(
+    env.SUPABASE_SERVICE_ROLE_KEY ||
+    env.SUPABASE_SECRET_KEY ||
+    env.SUPABASE_ANON_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    ''
+  );
   return {
     url,
     key,

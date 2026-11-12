@@ -354,6 +354,14 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
   const cfg = getSupabaseConfig(env);
   assert.equal(cfg.configured, true);
 
+  const nextPublicCfg = getSupabaseConfig({
+    NEXT_PUBLIC_SUPABASE_URL: 'https://demo.supabase.co',
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_123'
+  });
+  assert.equal(nextPublicCfg.configured, true);
+  assert.equal(nextPublicCfg.url, 'https://demo.supabase.co');
+  assert.equal(nextPublicCfg.key, 'sb_publishable_123');
+
   let storedRow = null;
   let forceConflictOnce = true;
 
