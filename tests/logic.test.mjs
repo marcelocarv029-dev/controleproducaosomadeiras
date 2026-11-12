@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
+import { Writable } from 'node:stream';
 
 import { createInitialDatabase } from '../public/js/seed.js';
+import { getLocalDateStr } from '../public/js/utils.js';
 import {
   SECTORS,
   ROLES,
@@ -26,8 +29,59 @@ import {
 } from '../api/_lib/supabaseStore.js';
 import healthHandler from '../api/health.js';
 
-test('Cálculo automático: produção bruta - quebras = aproveitável e status correto', () => {
+function createTestDatabase() {
   const db = createInitialDatabase();
+  const hoje = getLocalDateStr();
+  db.produtos = [
+    { id: 'prd_canaleta14', nome: 'Canaleta 14', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM001', ativo: true, foto: '' },
+    { id: 'prd_manilha30', nome: 'Manilha 30', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM003', ativo: true, foto: '' },
+    { id: 'prd_estaca2m', nome: 'Estaca 2M', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM004', ativo: true, foto: '' },
+    { id: 'prd_bloco14', nome: 'Bloco 14', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM005', ativo: true, foto: '' },
+    { id: 'prd_porta080', nome: 'Porta 0,80 x 2,10', setor: SECTORS.MARCENARIA, unidade: 'UN', codigo: 'MC001', ativo: true, foto: '' },
+    { id: 'prd_mesa', nome: 'Mesa de Madeira', setor: SECTORS.MARCENARIA, unidade: 'UN', codigo: 'MC005', ativo: true, foto: '' }
+  ];
+  db.producoes = [
+    {
+      id: 'reg_hoje_1', produtoId: 'prd_canaleta14', setor: SECTORS.PRE_MOLDADOS,
+      quantidade: 120, quantidadeQuebrada: 8, quantidadeAproveitavel: 112, quantidadeConferida: 112,
+      data: hoje, hora: '08:40', usuarioId: 'usr_pre', criadoPorId: 'usr_pre', status: PROD_STATUS.ENTRADA_REALIZADA
+    },
+    {
+      id: 'reg_hoje_2', produtoId: 'prd_manilha30', setor: SECTORS.PRE_MOLDADOS,
+      quantidade: 25, quantidadeQuebrada: 0, quantidadeAproveitavel: 25, quantidadeConferida: null,
+      data: hoje, hora: '09:50', usuarioId: 'usr_pre', criadoPorId: 'usr_pre', status: PROD_STATUS.PRODUZIDO
+    },
+    {
+      id: 'reg_hoje_3', produtoId: 'prd_estaca2m', setor: SECTORS.PRE_MOLDADOS,
+      quantidade: 50, quantidadeQuebrada: 2, quantidadeAproveitavel: 48, quantidadeConferida: 48,
+      data: hoje, hora: '11:10', usuarioId: 'usr_pre', criadoPorId: 'usr_pre', status: PROD_STATUS.ENTRADA_REALIZADA
+    },
+    {
+      id: 'reg_hoje_4', produtoId: 'prd_porta080', setor: SECTORS.MARCENARIA,
+      quantidade: 8, quantidadeQuebrada: 0, quantidadeAproveitavel: 8, quantidadeConferida: 8,
+      data: hoje, hora: '10:05', usuarioId: 'usr_mar', criadoPorId: 'usr_mar', status: PROD_STATUS.ENTRADA_REALIZADA
+    },
+    {
+      id: 'reg_hoje_5', produtoId: 'prd_mesa', setor: SECTORS.MARCENARIA,
+      quantidade: 3, quantidadeQuebrada: 0, quantidadeAproveitavel: 3, quantidadeConferida: 3,
+      data: hoje, hora: '14:20', usuarioId: 'usr_mar', criadoPorId: 'usr_mar', status: PROD_STATUS.CONFERIDO
+    }
+  ];
+  return db;
+}
+
+test('Banco inicial em produção começa limpo (sem produtos nem produções falsas)', () => {
+  const db = createInitialDatabase();
+  assert.equal(db.produtos.length, 0);
+  assert.equal(db.producoes.length, 0);
+  assert.equal(db.quebras.length, 0);
+  assert.equal(db.entradas.length, 0);
+  assert.equal(db.notificacoes.length, 0);
+  assert.equal(db.usuarios.length, 5);
+});
+
+test('Cálculo automático: produção bruta - quebras = aproveitável e status correto', () => {
+  const db = createTestDatabase();
   const actor = db.usuarios[0];
 
   const r1 = applySyncOp(db, {
@@ -60,7 +114,7 @@ test('Cálculo automático: produção bruta - quebras = aproveitável e status 
 });
 
 test('Conferência detecta divergência sem apagar valor original e permite entrada', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
   const confUser = db.usuarios.find((u) => u.perfil === ROLES.CONFERENCIA);
 
   const r1 = applySyncOp(db, {
@@ -85,7 +139,7 @@ test('Conferência detecta divergência sem apagar valor original e permite entr
   });
   assert.equal(c1.ok, true);
   assert.equal(c1.record.status, PROD_STATUS.DIVERGENCIA);
-  assert.equal(c1.record.quantidade, 120); // original preservado
+  assert.equal(c1.record.quantidade, 120);
   assert.equal(c1.record.quantidadeAproveitavel, 112);
   assert.equal(c1.record.quantidadeConferida, 110);
   assert.equal(db.divergencias.length, 1);
@@ -104,7 +158,7 @@ test('Conferência detecta divergência sem apagar valor original e permite entr
 });
 
 test('Idempotência na sincronização offline: mesmo opId não duplica produção', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
   const initialCount = db.producoes.length;
 
   const op = {
@@ -124,7 +178,7 @@ test('Idempotência na sincronização offline: mesmo opId não duplica produç�
 });
 
 test('Auditoria: impede exclusão de produto utilizado e preserva histórico ao corrigir', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
 
   const delUsed = applySyncOp(db, {
     opId: 'op_del_used',
@@ -155,7 +209,7 @@ test('Auditoria: impede exclusão de produto utilizado e preserva histórico ao 
 });
 
 test('Comando de voz para produção interpreta corretamente frases em português', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
 
   const p1 = parseVoiceProduction('Produzi 120 canaletas 14', db.produtos);
   assert.equal(p1.product?.id, 'prd_canaleta14');
@@ -174,7 +228,7 @@ test('Comando de voz para produção interpreta corretamente frases em portuguê
 });
 
 test('Busca global interpreta intenções por texto/voz', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
   const admin = db.usuarios.find((u) => u.perfil === ROLES.ADMIN);
 
   const rTodayCanaleta = executeGlobalSearch(db, 'Quero ver as canaletas produzidas hoje', admin);
@@ -192,7 +246,7 @@ test('Busca global interpreta intenções por texto/voz', () => {
 });
 
 test('Permissões e rotas iniciais por perfil de usuário', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
   const admin = db.usuarios.find((u) => u.perfil === ROLES.ADMIN);
   const patrao = db.usuarios.find((u) => u.perfil === ROLES.PATRAO);
   const conf = db.usuarios.find((u) => u.perfil === ROLES.CONFERENCIA);
@@ -210,20 +264,14 @@ test('Permissões e rotas iniciais por perfil de usuário', () => {
 });
 
 test('KPIs do Painel somam corretamente produzidos, quebrados, entradas e pendentes', () => {
-  const db = createInitialDatabase();
-  const hoje = db.producoes[0].data;
-  const hojeRecs = db.producoes.filter((r) => r.data === hoje);
-  const kpis = computeDashboardKpis(hojeRecs);
+  const db = createTestDatabase();
+  const kpis = computeDashboardKpis(db.producoes);
 
-  // Seed hoje: Canaleta 14 (120 prod, 8 qbr, 112 ent), Manilha 30 (25 prod, 25 pend), Estaca 2M (50 prod, 2 qbr, 48 ent), Porta (8 prod, 8 ent), Mesa (3 prod, 3 pend)
   assert.equal(kpis.produzidos, 206);
   assert.equal(kpis.quebrados, 10);
   assert.equal(kpis.entradasRealizadas, 168);
   assert.equal(kpis.pendentes, 28);
 });
-
-import { EventEmitter } from 'node:events';
-import { Writable } from 'node:stream';
 
 function invokeServer(server, { method = 'GET', url = '/', body = null }) {
   return new Promise((resolve) => {
@@ -284,10 +332,16 @@ test('Servidor HTTP PWA e API /api/sync funcionam ponta a ponta', async () => {
       body: {
         ops: [
           {
+            opId: 'api_op_prd_1',
+            type: 'SAVE_PRODUCT',
+            actorId: 'usr_admin',
+            payload: { id: 'prd_teste_1', nome: 'Bloco 14', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM001' }
+          },
+          {
             opId: 'api_op_1',
             type: 'SAVE_PRODUCTION',
             actorId: 'usr_pre',
-            payload: { produtoId: 'prd_bloco14', quantidade: 200 }
+            payload: { produtoId: 'prd_teste_1', quantidade: 200 }
           }
         ]
       }
@@ -295,7 +349,7 @@ test('Servidor HTTP PWA e API /api/sync funcionam ponta a ponta', async () => {
     assert.equal(syncRes.status, 200);
     const syncData = JSON.parse(syncRes.body);
     assert.equal(syncData.ok, true);
-    assert.ok(syncData.state.producoes.some((r) => r.produtoId === 'prd_bloco14' && r.quantidade === 200));
+    assert.ok(syncData.state.producoes.some((r) => r.produtoId === 'prd_teste_1' && r.quantidade === 200));
 
     const backupRes = await invokeServer(server, { method: 'GET', url: '/api/backup' });
     assert.equal(backupRes.status, 200);
@@ -307,7 +361,7 @@ test('Servidor HTTP PWA e API /api/sync funcionam ponta a ponta', async () => {
 });
 
 test('Marcenaria lança produto novo com foto e Conferência cadastra automaticamente', () => {
-  const db = createInitialDatabase();
+  const db = createTestDatabase();
   const initialProds = db.produtos.length;
 
   const r1 = applySyncOp(db, {
@@ -333,7 +387,7 @@ test('Marcenaria lança produto novo com foto e Conferência cadastra automatica
     opId: 'op_reg_temp_1',
     type: 'REGISTER_TEMP_PRODUCT',
     actorId: 'usr_conf',
-    actorName: 'Carlos Conferente',
+    actorName: 'Conferente',
     payload: { producaoId: r1.record.id }
   });
   assert.equal(reg.ok, true);
@@ -388,7 +442,7 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
     if (method === 'PATCH' && url.includes('/rest/v1/cp_state?')) {
       if (forceConflictOnce) {
         forceConflictOnce = false;
-        return { ok: true, status: 200, json: async () => [] }; // simula conflito otimista
+        return { ok: true, status: 200, json: async () => [] };
       }
       const payload = JSON.parse(init.body);
       storedRow = { id: 'main', data: payload.data, version: payload.version };
@@ -408,10 +462,16 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
   const syncRes = await syncOpsWithSupabase(
     [
       {
+        opId: 'sb_op_prd',
+        type: 'SAVE_PRODUCT',
+        actorId: 'usr_admin',
+        payload: { id: 'prd_sb_1', nome: 'Canaleta 14', setor: SECTORS.PRE_MOLDADOS, unidade: 'UN', codigo: 'PM001' }
+      },
+      {
         opId: 'sb_op_1',
         type: 'SAVE_PRODUCTION',
         actorId: 'usr_pre',
-        payload: { produtoId: 'prd_canaleta14', quantidade: 75 }
+        payload: { produtoId: 'prd_sb_1', quantidade: 75 }
       }
     ],
     mockFetch,
@@ -422,7 +482,6 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
   assert.ok(syncRes.state.producoes.some((r) => r.quantidade === 75));
   assert.equal(storedRow.version, 2);
 
-  // Testar handler /api/health
   let bodyStr = '';
   const mockRes = {
     statusCode: 200,
@@ -471,10 +530,16 @@ test('server.mjs (Render) usa Supabase automaticamente quando variáveis estão 
     body: {
       ops: [
         {
+          opId: 'render_op_prd',
+          type: 'SAVE_PRODUCT',
+          actorId: 'usr_admin',
+          payload: { id: 'prd_rnd_1', nome: 'Mesa', setor: SECTORS.MARCENARIA, unidade: 'UN', codigo: 'MC001' }
+        },
+        {
           opId: 'render_op_1',
           type: 'SAVE_PRODUCTION',
           actorId: 'usr_mar',
-          payload: { produtoId: 'prd_mesa', quantidade: 6 }
+          payload: { produtoId: 'prd_rnd_1', quantidade: 6 }
         }
       ]
     }
@@ -482,5 +547,5 @@ test('server.mjs (Render) usa Supabase automaticamente quando variáveis estão 
   assert.equal(syncRes.status, 200);
   const syncData = JSON.parse(syncRes.body);
   assert.equal(syncData.ok, true);
-  assert.ok(storedRow.data.producoes.some((r) => r.produtoId === 'prd_mesa' && r.quantidade === 6));
+  assert.ok(storedRow.data.producoes.some((r) => r.produtoId === 'prd_rnd_1' && r.quantidade === 6));
 });

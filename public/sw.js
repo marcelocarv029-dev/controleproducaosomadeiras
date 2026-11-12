@@ -1,4 +1,4 @@
-const CACHE_NAME = 'controle-producao-v2';
+const CACHE_NAME = 'controle-producao-v3';
 
 const APP_SHELL = [
   '/',

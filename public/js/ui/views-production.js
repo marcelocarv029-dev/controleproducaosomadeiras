@@ -489,15 +489,22 @@ export function renderRegisterProductionView({ db, user, params = {}, navigate, 
               </button>
             ` : ''}
 
-            <div class="grid-cards grid-cards-3">
-              ${list.map((p) => `
-                <button type="button" class="product-select-card" data-pick-prod="${p.id}">
-                  <img src="${p.foto}" alt="${escapeHtml(p.nome)}" class="product-photo-md" />
-                  <div class="product-select-name">${escapeHtml(p.nome)}</div>
-                  <div class="product-select-meta">${escapeHtml(p.codigo || '')} • ${escapeHtml(p.unidade)}</div>
-                </button>
-              `).join('')}
-            </div>
+            ${list.length === 0 ? `
+              <div class="empty-state">
+                Nenhum produto cadastrado neste setor ainda.<br/>
+                Entre como Administrador em <strong>🏷️ PRODUTOS</strong> para cadastrar.
+              </div>
+            ` : `
+              <div class="grid-cards grid-cards-3">
+                ${list.map((p) => `
+                  <button type="button" class="product-select-card" data-pick-prod="${p.id}">
+                    <img src="${p.foto}" alt="${escapeHtml(p.nome)}" class="product-photo-md" />
+                    <div class="product-select-name">${escapeHtml(p.nome)}</div>
+                    <div class="product-select-meta">${escapeHtml(p.codigo || '')} • ${escapeHtml(p.unidade)}</div>
+                  </button>
+                `).join('')}
+              </div>
+            `}
           `;
 
           document.getElementById('reg-unreg-mar-btn')?.addEventListener('click', () => {

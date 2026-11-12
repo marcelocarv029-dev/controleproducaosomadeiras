@@ -75,10 +75,14 @@ async function idbDelete(storeName, key) {
   });
 }
 
+function isLegacyDemoData(data) {
+  return Boolean(data && data.version === 1 && Array.isArray(data.producoes) && data.producoes.some((r) => r.id === 'reg_hoje_1'));
+}
+
 export async function loadLocalState() {
   try {
     const data = await idbGet(STORE_STATE, 'main');
-    if (data && Array.isArray(data.usuarios) && Array.isArray(data.produtos)) {
+    if (data && Array.isArray(data.usuarios) && Array.isArray(data.produtos) && !isLegacyDemoData(data)) {
       return data;
     }
   } catch {
@@ -89,7 +93,7 @@ export async function loadLocalState() {
     const raw = localStorage.getItem(LS_FALLBACK_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.usuarios)) {
+      if (parsed && Array.isArray(parsed.usuarios) && !isLegacyDemoData(parsed)) {
         return parsed;
       }
     }

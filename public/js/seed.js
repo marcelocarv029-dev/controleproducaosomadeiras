@@ -1,5 +1,4 @@
-import { SECTORS, ROLES, PROD_STATUS } from './logic.js';
-import { getLocalDateStr, addDays } from './utils.js';
+import { SECTORS, ROLES } from './logic.js';
 
 function svgUri(svg) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg.trim())}`;
@@ -20,11 +19,7 @@ export const PRODUCT_PHOTOS = {
   banco: svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220"><rect width="320" height="220" fill="#FEF3C7"/><rect x="48" y="84" width="224" height="26" rx="5" fill="#B45309" stroke="#78350F" stroke-width="4"/><rect x="70" y="110" width="24" height="62" fill="#92400E" stroke="#78350F" stroke-width="3"/><rect x="226" y="110" width="24" height="62" fill="#92400E" stroke="#78350F" stroke-width="3"/><rect x="94" y="132" width="132" height="12" fill="#78350F"/><text x="160" y="204" font-family="Arial,sans-serif" font-weight="bold" font-size="20" text-anchor="middle" fill="#78350F">BANCO DE MADEIRA</text></svg>`)
 };
 
-export function createInitialDatabase(refDate = new Date()) {
-  const hoje = getLocalDateStr(refDate);
-  const ontem = addDays(hoje, -1);
-  const doisDias = addDays(hoje, -2);
-
+export function createInitialDatabase() {
   const usuarios = [
     {
       id: 'usr_admin',
@@ -46,7 +41,7 @@ export function createInitialDatabase(refDate = new Date()) {
     },
     {
       id: 'usr_conf',
-      nome: 'Carlos Conferente',
+      nome: 'Conferente',
       usuario: 'conferencia',
       senha: '123',
       perfil: ROLES.CONFERENCIA,
@@ -55,7 +50,7 @@ export function createInitialDatabase(refDate = new Date()) {
     },
     {
       id: 'usr_pre',
-      nome: 'João (Pré-Moldados)',
+      nome: 'Produção Pré-Moldados',
       usuario: 'premoldados',
       senha: '123',
       perfil: ROLES.PRODUCAO,
@@ -64,7 +59,7 @@ export function createInitialDatabase(refDate = new Date()) {
     },
     {
       id: 'usr_mar',
-      nome: 'Marcos (Marcenaria)',
+      nome: 'Produção Marcenaria',
       usuario: 'marcenaria',
       senha: '123',
       perfil: ROLES.PRODUCAO,
@@ -73,423 +68,21 @@ export function createInitialDatabase(refDate = new Date()) {
     }
   ];
 
-  const produtos = [
-    {
-      id: 'prd_canaleta14',
-      nome: 'Canaleta 14',
-      setor: SECTORS.PRE_MOLDADOS,
-      unidade: 'UN',
-      codigo: 'PM001',
-      descricao: 'Canaleta de concreto estrutural 14cm',
-      foto: PRODUCT_PHOTOS.canaleta14,
-      ativo: true
-    },
-    {
-      id: 'prd_canaleta19',
-      nome: 'Canaleta 19',
-      setor: SECTORS.PRE_MOLDADOS,
-      unidade: 'UN',
-      codigo: 'PM002',
-      descricao: 'Canaleta de concreto estrutural 19cm',
-      foto: PRODUCT_PHOTOS.canaleta19,
-      ativo: true
-    },
-    {
-      id: 'prd_manilha30',
-      nome: 'Manilha 30',
-      setor: SECTORS.PRE_MOLDADOS,
-      unidade: 'UN',
-      codigo: 'PM003',
-      descricao: 'Manilha de concreto DN 300mm',
-      foto: PRODUCT_PHOTOS.manilha30,
-      ativo: true
-    },
-    {
-      id: 'prd_estaca2m',
-      nome: 'Estaca 2M',
-      setor: SECTORS.PRE_MOLDADOS,
-      unidade: 'UN',
-      codigo: 'PM004',
-      descricao: 'Mourão / Estaca pré-moldada 2 metros',
-      foto: PRODUCT_PHOTOS.estaca2m,
-      ativo: true
-    },
-    {
-      id: 'prd_bloco14',
-      nome: 'Bloco 14',
-      setor: SECTORS.PRE_MOLDADOS,
-      unidade: 'UN',
-      codigo: 'PM005',
-      descricao: 'Bloco de concreto 14x19x39',
-      foto: PRODUCT_PHOTOS.bloco14,
-      ativo: true
-    },
-    {
-      id: 'prd_porta080',
-      nome: 'Porta 0,80 x 2,10',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'UN',
-      codigo: 'MC001',
-      descricao: 'Porta de madeira maciça 0,80 x 2,10m',
-      foto: PRODUCT_PHOTOS.porta,
-      ativo: true
-    },
-    {
-      id: 'prd_janela',
-      nome: 'Janela de Madeira',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'UN',
-      codigo: 'MC002',
-      descricao: 'Janela completa em madeira de lei',
-      foto: PRODUCT_PHOTOS.janela,
-      ativo: true
-    },
-    {
-      id: 'prd_aduela',
-      nome: 'Aduela',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'JOGO',
-      codigo: 'MC003',
-      descricao: 'Jogo de aduela / marco para porta',
-      foto: PRODUCT_PHOTOS.aduela,
-      ativo: true
-    },
-    {
-      id: 'prd_alisar',
-      nome: 'Alisar',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'JOGO',
-      codigo: 'MC004',
-      descricao: 'Jogo de alisar / guarnição',
-      foto: PRODUCT_PHOTOS.alisar,
-      ativo: true
-    },
-    {
-      id: 'prd_mesa',
-      nome: 'Mesa de Madeira',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'UN',
-      codigo: 'MC005',
-      descricao: 'Mesa rústica em madeira tratada',
-      foto: PRODUCT_PHOTOS.mesa,
-      ativo: true
-    },
-    {
-      id: 'prd_cadeira',
-      nome: 'Cadeira de Madeira',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'UN',
-      codigo: 'MC006',
-      descricao: 'Cadeira reforçada em madeira',
-      foto: PRODUCT_PHOTOS.cadeira,
-      ativo: true
-    },
-    {
-      id: 'prd_banco',
-      nome: 'Banco de Madeira',
-      setor: SECTORS.MARCENARIA,
-      unidade: 'UN',
-      codigo: 'MC007',
-      descricao: 'Banco de jardim/varanda em madeira',
-      foto: PRODUCT_PHOTOS.banco,
-      ativo: true
-    }
-  ];
-
-  const producoes = [
-    {
-      id: 'reg_hoje_1',
-      produtoId: 'prd_canaleta14',
-      setor: SECTORS.PRE_MOLDADOS,
-      quantidade: 120,
-      quantidadeQuebrada: 8,
-      quantidadeAproveitavel: 112,
-      quantidadeConferida: 112,
-      data: hoje,
-      hora: '08:40',
-      usuarioId: 'usr_pre',
-      criadoPorId: 'usr_pre',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: hoje,
-      conferidoHora: '10:15',
-      entradaData: hoje,
-      entradaHora: '10:30',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_hoje_2',
-      produtoId: 'prd_manilha30',
-      setor: SECTORS.PRE_MOLDADOS,
-      quantidade: 25,
-      quantidadeQuebrada: 0,
-      quantidadeAproveitavel: 25,
-      quantidadeConferida: null,
-      data: hoje,
-      hora: '09:50',
-      usuarioId: 'usr_pre',
-      criadoPorId: 'usr_pre',
-      status: PROD_STATUS.PRODUZIDO,
-      origem: 'manual'
-    },
-    {
-      id: 'reg_hoje_3',
-      produtoId: 'prd_estaca2m',
-      setor: SECTORS.PRE_MOLDADOS,
-      quantidade: 50,
-      quantidadeQuebrada: 2,
-      quantidadeAproveitavel: 48,
-      quantidadeConferida: 48,
-      data: hoje,
-      hora: '11:10',
-      usuarioId: 'usr_pre',
-      criadoPorId: 'usr_pre',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: hoje,
-      conferidoHora: '13:20',
-      entradaData: hoje,
-      entradaHora: '13:25',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_hoje_4',
-      produtoId: 'prd_porta080',
-      setor: SECTORS.MARCENARIA,
-      quantidade: 8,
-      quantidadeQuebrada: 0,
-      quantidadeAproveitavel: 8,
-      quantidadeConferida: 8,
-      data: hoje,
-      hora: '10:05',
-      usuarioId: 'usr_mar',
-      criadoPorId: 'usr_mar',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: hoje,
-      conferidoHora: '14:00',
-      entradaData: hoje,
-      entradaHora: '14:10',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_hoje_5',
-      produtoId: 'prd_mesa',
-      setor: SECTORS.MARCENARIA,
-      quantidade: 3,
-      quantidadeQuebrada: 0,
-      quantidadeAproveitavel: 3,
-      quantidadeConferida: 3,
-      data: hoje,
-      hora: '14:20',
-      usuarioId: 'usr_mar',
-      criadoPorId: 'usr_mar',
-      status: PROD_STATUS.CONFERIDO,
-      conferidoPorId: 'usr_conf',
-      conferidoData: hoje,
-      conferidoHora: '15:10',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_ontem_1',
-      produtoId: 'prd_canaleta19',
-      setor: SECTORS.PRE_MOLDADOS,
-      quantidade: 180,
-      quantidadeQuebrada: 6,
-      quantidadeAproveitavel: 174,
-      quantidadeConferida: 174,
-      data: ontem,
-      hora: '16:10',
-      usuarioId: 'usr_pre',
-      criadoPorId: 'usr_pre',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: ontem,
-      conferidoHora: '17:00',
-      entradaData: ontem,
-      entradaHora: '17:15',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_ontem_2',
-      produtoId: 'prd_aduela',
-      setor: SECTORS.MARCENARIA,
-      quantidade: 14,
-      quantidadeQuebrada: 0,
-      quantidadeAproveitavel: 14,
-      quantidadeConferida: 14,
-      data: ontem,
-      hora: '15:30',
-      usuarioId: 'usr_mar',
-      criadoPorId: 'usr_mar',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: ontem,
-      conferidoHora: '16:50',
-      entradaData: ontem,
-      entradaHora: '17:10',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    },
-    {
-      id: 'reg_2dias_1',
-      produtoId: 'prd_bloco14',
-      setor: SECTORS.PRE_MOLDADOS,
-      quantidade: 320,
-      quantidadeQuebrada: 10,
-      quantidadeAproveitavel: 310,
-      quantidadeConferida: 310,
-      data: doisDias,
-      hora: '16:40',
-      usuarioId: 'usr_pre',
-      criadoPorId: 'usr_pre',
-      status: PROD_STATUS.ENTRADA_REALIZADA,
-      conferidoPorId: 'usr_conf',
-      conferidoData: doisDias,
-      conferidoHora: '17:20',
-      entradaData: doisDias,
-      entradaHora: '17:35',
-      entradaUsuarioId: 'usr_conf',
-      origem: 'manual'
-    }
-  ];
-
-  const quebras = [
-    {
-      id: 'qbr_1',
-      producaoId: 'reg_hoje_1',
-      produtoId: 'prd_canaleta14',
-      quantidadeProduzida: 120,
-      quantidade: 8,
-      quantidadeAproveitavel: 112,
-      motivo: 'Desenforma / canto quebrado',
-      usuarioId: 'usr_pre',
-      data: hoje,
-      hora: '09:15'
-    },
-    {
-      id: 'qbr_2',
-      producaoId: 'reg_hoje_3',
-      produtoId: 'prd_estaca2m',
-      quantidadeProduzida: 50,
-      quantidade: 2,
-      quantidadeAproveitavel: 48,
-      motivo: 'Trinca no transporte interno',
-      usuarioId: 'usr_pre',
-      data: hoje,
-      hora: '11:40'
-    },
-    {
-      id: 'qbr_3',
-      producaoId: 'reg_ontem_1',
-      produtoId: 'prd_canaleta19',
-      quantidadeProduzida: 180,
-      quantidade: 6,
-      quantidadeAproveitavel: 174,
-      motivo: 'Desenforma',
-      usuarioId: 'usr_pre',
-      data: ontem,
-      hora: '16:30'
-    }
-  ];
-
-  const entradas = [
-    {
-      id: 'ent_1',
-      produtoId: 'prd_canaleta14',
-      producaoId: 'reg_hoje_1',
-      quantidade: 112,
-      usuarioId: 'usr_conf',
-      data: hoje,
-      hora: '10:30'
-    },
-    {
-      id: 'ent_2',
-      produtoId: 'prd_estaca2m',
-      producaoId: 'reg_hoje_3',
-      quantidade: 48,
-      usuarioId: 'usr_conf',
-      data: hoje,
-      hora: '13:25'
-    },
-    {
-      id: 'ent_3',
-      produtoId: 'prd_porta080',
-      producaoId: 'reg_hoje_4',
-      quantidade: 8,
-      usuarioId: 'usr_conf',
-      data: hoje,
-      hora: '14:10'
-    },
-    {
-      id: 'ent_4',
-      produtoId: 'prd_canaleta19',
-      producaoId: 'reg_ontem_1',
-      quantidade: 174,
-      usuarioId: 'usr_conf',
-      data: ontem,
-      hora: '17:15'
-    },
-    {
-      id: 'ent_5',
-      produtoId: 'prd_aduela',
-      producaoId: 'reg_ontem_2',
-      quantidade: 14,
-      usuarioId: 'usr_conf',
-      data: ontem,
-      hora: '17:10'
-    },
-    {
-      id: 'ent_6',
-      produtoId: 'prd_bloco14',
-      producaoId: 'reg_2dias_1',
-      quantidade: 310,
-      usuarioId: 'usr_conf',
-      data: doisDias,
-      hora: '17:35'
-    }
-  ];
-
-  const notificacoes = [
-    {
-      id: 'notif_1',
-      tipo: 'AGUARDANDO_CONFERENCIA',
-      titulo: '🔔 Produção aguardando conferência',
-      mensagem: 'Manilha 30 — 25 UN (Pré-Moldados)',
-      refId: 'reg_hoje_2',
-      lida: false,
-      criadaEm: new Date(refDate.getTime() - 3600000).toISOString()
-    },
-    {
-      id: 'notif_2',
-      tipo: 'ENTRADA_PENDENTE',
-      titulo: '🔔 Produto com entrada pendente',
-      mensagem: 'Mesa de Madeira — 3 UN conferidas, aguardando entrada no sistema',
-      refId: 'reg_hoje_5',
-      lida: false,
-      criadaEm: new Date(refDate.getTime() - 1800000).toISOString()
-    }
-  ];
-
   return {
-    version: 1,
+    version: 2,
     usuarios,
-    produtos,
+    produtos: [],
     setores: [
       { id: SECTORS.PRE_MOLDADOS, nome: 'Pré-Moldados' },
       { id: SECTORS.MARCENARIA, nome: 'Marcenaria' }
     ],
-    producoes,
-    quebras,
+    producoes: [],
+    quebras: [],
     conferencias: [],
-    entradas,
+    entradas: [],
     divergencias: [],
     historicoAlteracoes: [],
-    notificacoes,
+    notificacoes: [],
     processedOpIds: [],
     updatedAt: new Date().toISOString()
   };
