@@ -1,0 +1,14 @@
+# Dependências e ambiente
+node_modules/
+.env
+.env.local
+.env.*.local
+.vercel/
+
+# Banco local de desenvolvimento
+data/
+
+# Logs e sistema
+*.log
+.DS_Store
+Thumbs.db

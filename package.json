@@ -1,0 +1,10 @@
+{
+  "name": "controle-de-producao-somadeiras",
+  "version": "1.0.0",
+  "description": "PWA mobile-first Controle de Produção para Pré-Moldados e Marcenaria - Somadeiras",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/logic.test.mjs"
+  }
+}
