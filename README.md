@@ -5,39 +5,30 @@ Aplicativo PWA **mobile-first** e **offline-first** para controle do fluxo:
 
 ---
 
-## 1. Deploy em Produção (Supabase + GitHub + Vercel)
+## 1. Deploy em Produção (Supabase + GitHub + Render)
 
 ### Passo 1 — Configurar o Supabase
 1. Crie um projeto gratuito em [supabase.com](https://supabase.com).
 2. No menu lateral, abra **SQL Editor** → **New query**.
 3. Copie e execute todo o conteúdo do arquivo [`supabase/schema.sql`](supabase/schema.sql).
-   - Isso cria a tabela `public.cp_state` (com RLS ativado) e as views de consulta (`vw_produtos`, `vw_producoes`, `vw_quebras`, `vw_entradas`).
-4. Vá em **Project Settings → API** e copie:
-   - **Project URL** (`SUPABASE_URL`)
-   - **service_role secret** (`SUPABASE_SERVICE_ROLE_KEY`) — *nunca exponha essa chave no frontend; ela é usada apenas nas Serverless Functions da Vercel.*
+4. Em **Project Settings → API Keys**, copie a **Project URL** e a **Secret key** (`sb_secret_...` ou `service_role`).
 
-### Passo 2 — Enviar para o GitHub
-Na pasta do projeto, execute:
+### Passo 2 — Subir no GitHub
+O repositório já está configurado em `https://github.com/marcelocarv029-dev/controleproducaosomadeiras`.
 
-```bash
-git init
-git add .
-git commit -m "Versao inicial Controle de Producao PWA"
-git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
-git push -u origin main
-```
-
-### Passo 3 — Deploy na Vercel
-1. Acesse [vercel.com](https://vercel.com) e clique em **Add New → Project**.
-2. Importe o repositório do GitHub.
-3. Em **Build and Output Settings**, mantenha tudo padrão (não há etapa de build; a pasta `public/` e as funções em `api/` são detectadas automaticamente).
+### Passo 3 — Deploy no Render
+1. Acesse [render.com](https://render.com) → **New + → Web Service** (ou **Blueprint** usando [`render.yaml`](render.yaml)).
+2. Conecte o repositório `marcelocarv029-dev/controleproducaosomadeiras` (branch `main`).
+3. Configure:
+   - **Runtime:** `Node`
+   - **Build Command:** *(deixe vazio)*
+   - **Start Command:** `npm start`
 4. Em **Environment Variables**, adicione:
-   - `SUPABASE_URL` = URL do seu projeto Supabase
-   - `SUPABASE_SERVICE_ROLE_KEY` = chave `service_role` do Supabase
-5. Clique em **Deploy**.
+   - `SUPABASE_URL` = `https://seu-projeto.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = `sb_secret_...` *(ou `service_role`)*
+5. Clique em **Create Web Service**.
 
-Ao abrir a URL da Vercel pela primeira vez, `/api/state` inicializa automaticamente os dados iniciais no Supabase (usuários, produtos com fotos e exemplos).
+Quando `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão configuradas, o `server.mjs` grava e sincroniza tudo diretamente no Supabase (sem depender do disco local do Render).
 
 ---
 

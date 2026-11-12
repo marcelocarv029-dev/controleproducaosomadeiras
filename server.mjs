@@ -5,6 +5,12 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createInitialDatabase } from './public/js/seed.js';
 import { applySyncOp } from './public/js/logic.js';
+import {
+  getSupabaseConfig,
+  loadSupabaseState,
+  saveSupabaseState,
+  syncOpsWithSupabase
+} from './api/_lib/supabaseStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,24 +100,48 @@ function sendJson(res, statusCode, payload, extraHeaders = {}) {
 
 export function createAppServer(options = {}) {
   const dbFilePath = options.dbFilePath || DB_FILE;
-  let db = loadOrCreateDb(dbFilePath);
+  const env = options.env || process.env;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const sbConfig = getSupabaseConfig(env);
+  const useSupabase = sbConfig.configured;
+
+  let db = useSupabase ? null : loadOrCreateDb(dbFilePath);
 
   const server = http.createServer(async (req, res) => {
     const urlObj = new URL(req.url || '/', 'http://localhost');
     const pathname = decodeURIComponent(urlObj.pathname);
 
     if (req.method === 'GET' && pathname === '/api/health') {
-      return sendJson(res, 200, { ok: true, time: new Date().toISOString() });
+      return sendJson(res, 200, {
+        ok: true,
+        backend: useSupabase ? 'supabase' : 'local-file',
+        configured: true,
+        time: new Date().toISOString()
+      });
     }
 
     if (req.method === 'GET' && pathname === '/api/state') {
-      return sendJson(res, 200, { ok: true, state: db });
+      try {
+        if (useSupabase) {
+          const { state } = await loadSupabaseState(fetchImpl, env);
+          return sendJson(res, 200, { ok: true, state });
+        }
+        return sendJson(res, 200, { ok: true, state: db });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: err.message });
+      }
     }
 
     if (req.method === 'POST' && pathname === '/api/sync') {
       try {
         const body = await readJsonBody(req);
         const ops = Array.isArray(body.ops) ? body.ops : [];
+
+        if (useSupabase) {
+          const result = await syncOpsWithSupabase(ops, fetchImpl, env);
+          return sendJson(res, 200, result);
+        }
+
         const results = [];
         let changed = false;
 
@@ -134,10 +164,15 @@ export function createAppServer(options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/backup') {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      return sendJson(res, 200, db, {
-        'Content-Disposition': `attachment; filename="controle-producao-backup-${dateStr}.json"`
-      });
+      try {
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const snapshot = useSupabase ? (await loadSupabaseState(fetchImpl, env)).state : db;
+        return sendJson(res, 200, snapshot, {
+          'Content-Disposition': `attachment; filename="controle-producao-backup-${dateStr}.json"`
+        });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: err.message });
+      }
     }
 
     if (req.method === 'POST' && pathname === '/api/restore') {
@@ -147,8 +182,15 @@ export function createAppServer(options = {}) {
         if (!candidate || !Array.isArray(candidate.usuarios) || !Array.isArray(candidate.produtos) || !Array.isArray(candidate.producoes)) {
           return sendJson(res, 400, { ok: false, error: 'Arquivo de backup inválido' });
         }
+        candidate.updatedAt = new Date().toISOString();
+
+        if (useSupabase) {
+          await loadSupabaseState(fetchImpl, env);
+          const saved = await saveSupabaseState(candidate, null, fetchImpl, env);
+          return sendJson(res, 200, { ok: true, state: saved.state });
+        }
+
         db = candidate;
-        db.updatedAt = new Date().toISOString();
         saveDb(db, dbFilePath);
         return sendJson(res, 200, { ok: true, state: db });
       } catch (err) {
@@ -201,6 +243,7 @@ function getLocalNetworkUrls(port) {
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
 if (isMain) {
   const PORT = Number(process.env.PORT) || 3000;
+  const sbCfg = getSupabaseConfig();
   const server = createAppServer();
   server.listen(PORT, '0.0.0.0', () => {
     console.log('\n=================================================');
@@ -209,7 +252,7 @@ if (isMain) {
     for (const url of getLocalNetworkUrls(PORT)) {
       console.log(`  Acesse: ${url}`);
     }
-    console.log('  Banco de dados: data/db.json');
+    console.log(`  Banco de dados: ${sbCfg.configured ? 'Supabase (nuvem)' : 'data/db.json (local)'}`);
     console.log('=================================================\n');
   });
 }

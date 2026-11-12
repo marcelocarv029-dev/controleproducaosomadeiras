@@ -435,3 +435,52 @@ test('Adaptador Vercel + Supabase inicializa, sincroniza ops e trata conflito de
   assert.equal(health.ok, true);
   assert.equal(health.backend, 'supabase');
 });
+
+test('server.mjs (Render) usa Supabase automaticamente quando variáveis estão configuradas', async () => {
+  let storedRow = null;
+  const env = {
+    SUPABASE_URL: 'https://demo.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_render_test'
+  };
+  const mockFetch = async (url, init = {}) => {
+    const method = (init.method || 'GET').toUpperCase();
+    if (method === 'GET' && url.includes('/rest/v1/cp_state?id=eq.main')) {
+      return { ok: true, status: 200, json: async () => (storedRow ? [JSON.parse(JSON.stringify(storedRow))] : []) };
+    }
+    if (method === 'POST' && url.includes('/rest/v1/cp_state')) {
+      const payload = JSON.parse(init.body);
+      storedRow = { id: payload.id, data: payload.data, version: payload.version };
+      return { ok: true, status: 201, json: async () => [JSON.parse(JSON.stringify(storedRow))] };
+    }
+    if (method === 'PATCH' && url.includes('/rest/v1/cp_state?')) {
+      const payload = JSON.parse(init.body);
+      storedRow = { id: 'main', data: payload.data, version: payload.version };
+      return { ok: true, status: 200, json: async () => [JSON.parse(JSON.stringify(storedRow))] };
+    }
+    return { ok: false, status: 404, text: async () => 'Not found' };
+  };
+
+  const server = createAppServer({ env, fetchImpl: mockFetch });
+  const healthRes = await invokeServer(server, { method: 'GET', url: '/api/health' });
+  assert.equal(healthRes.status, 200);
+  assert.equal(JSON.parse(healthRes.body).backend, 'supabase');
+
+  const syncRes = await invokeServer(server, {
+    method: 'POST',
+    url: '/api/sync',
+    body: {
+      ops: [
+        {
+          opId: 'render_op_1',
+          type: 'SAVE_PRODUCTION',
+          actorId: 'usr_mar',
+          payload: { produtoId: 'prd_mesa', quantidade: 6 }
+        }
+      ]
+    }
+  });
+  assert.equal(syncRes.status, 200);
+  const syncData = JSON.parse(syncRes.body);
+  assert.equal(syncData.ok, true);
+  assert.ok(storedRow.data.producoes.some((r) => r.produtoId === 'prd_mesa' && r.quantidade === 6));
+});

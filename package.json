@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "PWA mobile-first Controle de Produção para Pré-Moldados e Marcenaria - Somadeiras",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test tests/logic.test.mjs"
