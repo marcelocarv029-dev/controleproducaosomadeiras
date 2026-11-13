@@ -6,9 +6,11 @@ import {
   computeProductionSummary,
   filterByPeriod,
   canEditEntry,
+  canCorrectProduction,
+  canUndoEntry,
   getRecordProduct
 } from '../logic.js';
-import { renderStatusPill, showToast } from './components.js';
+import { renderStatusPill, showToast, confirmDangerousAction, openCorrectionModal } from './components.js';
 
 export function renderConferenceView({ db, user, onMutate }) {
   const prodMap = new Map(db.produtos.map((p) => [p.id, p]));
@@ -106,6 +108,22 @@ export function renderConferenceView({ db, user, onMutate }) {
               </button>
             </div>
           `}
+          <div style="margin-top:8px;text-align:right;">
+            <button type="button" class="btn btn-outline btn-sm btn-edit-conf" data-id="${rec.id}">
+              ✏️ Corrigir Lote
+            </button>
+          </div>
+        ` : ''}
+
+        ${canAct && s.entradaRealizada ? `
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button type="button" class="btn btn-outline btn-sm btn-edit-conf" data-id="${rec.id}" style="flex:1;">
+              ✏️ Corrigir
+            </button>
+            <button type="button" class="btn btn-soft-amber btn-sm btn-undo-entry-conf" data-id="${rec.id}" style="flex:1;">
+              ↩️ Desfazer Entrada
+            </button>
+          </div>
         ` : ''}
       </div>
     `;
@@ -191,11 +209,38 @@ export function renderConferenceView({ db, user, onMutate }) {
           }
         });
       });
+
+      document.querySelectorAll('.btn-edit-conf').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const rec = db.producoes.find((r) => r.id === btn.dataset.id);
+          if (rec) openCorrectionModal({ rec, db, user, onMutate });
+        });
+      });
+
+      document.querySelectorAll('.btn-undo-entry-conf').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const rec = db.producoes.find((r) => r.id === btn.dataset.id);
+          if (!rec) return;
+          confirmDangerousAction({
+            title: 'Desfazer Entrada',
+            message: `Deseja realmente cancelar a entrada no estoque deste lote? O status voltará a ser conferido/pendente de entrada.`,
+            confirmLabel: 'Sim, Desfazer Entrada',
+            onConfirm: async () => {
+              const res = await onMutate('UNDO_ENTRY', {
+                producaoId: rec.id,
+                motivo: 'Entrada desfeita pelo usuário (apertada sem querer)'
+              });
+              if (res.ok) showToast('↩️ Entrada desfeita com sucesso!');
+              else showToast(res.error || 'Erro ao desfazer', 'error');
+            }
+          });
+        });
+      });
     }
   };
 }
 
-export function renderEntriesHistoryView({ db }) {
+export function renderEntriesHistoryView({ db, user, onMutate }) {
   let period = '7dias';
   let customStart = '';
   let customEnd = '';
@@ -313,15 +358,52 @@ export function renderEntriesHistoryView({ db }) {
                   <div class="text-muted" style="font-size:0.82rem;font-weight:700;">
                     📅 ${formatDateBR(dt)} ${hr} • ${escapeHtml(resp)}
                   </div>
-                  <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+                  <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
                     ${renderStatusPill(s.statusTone, s.statusBadge)}
                     ${r.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(r.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
                   </div>
                 </div>
               </div>
+              ${(canCorrectProduction(user, r) || (canUndoEntry(user) && r.status === PROD_STATUS.ENTRADA_REALIZADA)) ? `
+                <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                  ${canCorrectProduction(user, r) ? `<button type="button" class="btn btn-secondary btn-sm btn-edit-ent" data-id="${r.id}">✏️ Corrigir</button>` : ''}
+                  ${(canUndoEntry(user) && r.status === PROD_STATUS.ENTRADA_REALIZADA) ? `<button type="button" class="btn btn-warning btn-sm btn-undo-ent" data-id="${r.id}">↩️ Desfazer Entrada</button>` : ''}
+                </div>
+              ` : ''}
             </div>
           `;
         }).join('');
+
+        listEl.querySelectorAll('.btn-edit-ent').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const rec = db.producoes.find((r) => r.id === btn.dataset.id);
+            if (rec) openCorrectionModal({ rec, db, user, onMutate });
+          });
+        });
+
+        listEl.querySelectorAll('.btn-undo-ent').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const rec = db.producoes.find((r) => r.id === btn.dataset.id);
+            if (!rec) return;
+            confirmDangerousAction({
+              title: 'Desfazer Entrada no Estoque',
+              message: `Deseja realmente desfazer a entrada deste lote no estoque? O lote voltará a ficar aguardando conferência/entrada.`,
+              confirmLabel: 'Sim, Desfazer Entrada',
+              onConfirm: async () => {
+                const res = await onMutate('UNDO_ENTRY', {
+                  producaoId: rec.id,
+                  motivo: 'Entrada desfeita pelo usuário (apertada sem querer)'
+                });
+                if (res.ok) {
+                  showToast('↩️ Entrada desfeita com sucesso!');
+                  renderList();
+                } else {
+                  showToast(res.error || 'Erro ao desfazer', 'error');
+                }
+              }
+            });
+          });
+        });
       }
 
       document.querySelectorAll('#ent-period-chips .chip').forEach((btn) => {

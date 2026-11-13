@@ -216,6 +216,21 @@ export function canEditEntry(user) {
   return user && (user.perfil === ROLES.ADMIN || user.perfil === ROLES.CONFERENCIA);
 }
 
+export function canCorrectProduction(user, rec) {
+  if (!user || !rec) return false;
+  if (user.perfil === ROLES.ADMIN || user.perfil === ROLES.PATRAO || user.perfil === ROLES.CONFERENCIA) {
+    return true;
+  }
+  if (user.perfil === ROLES.PRODUCAO && rec.status !== PROD_STATUS.ENTRADA_REALIZADA) {
+    if (user.setor === 'AMBOS' || user.setor === rec.setor) return true;
+  }
+  return false;
+}
+
+export function canUndoEntry(user) {
+  return Boolean(user && (user.perfil === ROLES.ADMIN || user.perfil === ROLES.CONFERENCIA || user.perfil === ROLES.PATRAO));
+}
+
 export function canRegisterProduction(user) {
   return user && (user.perfil === ROLES.ADMIN || user.perfil === ROLES.PRODUCAO);
 }
@@ -1173,8 +1188,10 @@ export function applySyncOp(db, op) {
     case 'CORRECT_PRODUCTION': {
       const rec = db.producoes.find((r) => r.id === p.producaoId);
       if (!rec) return { ok: false, error: 'Registro não encontrado' };
-      const novaQtd = Number(p.quantidade);
-      const novaQuebra = Number(p.quantidadeQuebrada);
+      const rawQtd = p.quantidade !== undefined ? p.quantidade : (p.novaQuantidade !== undefined ? p.novaQuantidade : rec.quantidade);
+      const rawQuebra = p.quantidadeQuebrada !== undefined ? p.quantidadeQuebrada : (p.novaQuebra !== undefined ? p.novaQuebra : (rec.quantidadeQuebrada || 0));
+      const novaQtd = Number(rawQtd);
+      const novaQuebra = Number(rawQuebra);
       if (!Number.isFinite(novaQtd) || novaQtd <= 0) return { ok: false, error: 'Quantidade inválida' };
       if (!Number.isFinite(novaQuebra) || novaQuebra < 0 || novaQuebra > novaQtd) {
         return { ok: false, error: 'Quebra inválida' };
@@ -1205,6 +1222,12 @@ export function applySyncOp(db, op) {
           ? PROD_STATUS.CONFERIDO
           : PROD_STATUS.DIVERGENCIA;
       }
+      if (rec.status === PROD_STATUS.ENTRADA_REALIZADA) {
+        const ent = (db.entradas || []).find((e) => e.producaoId === rec.id);
+        if (ent) {
+          ent.quantidade = rec.quantidadeAproveitavel;
+        }
+      }
       rec.alteradoPorId = actorId;
       rec.alteradoEm = new Date().toISOString();
 
@@ -1214,8 +1237,70 @@ export function applySyncOp(db, op) {
         quantidadeAproveitavel: rec.quantidadeAproveitavel,
         quantidadeConferida: rec.quantidadeConferida,
         status: rec.status
-      }, p.motivo || 'Correção administrativa');
+      }, p.motivo || 'Correção de produção');
       result.record = rec;
+      break;
+    }
+
+    case 'UNDO_ENTRY': {
+      const rec = db.producoes.find((r) => r.id === p.producaoId);
+      if (!rec) return { ok: false, error: 'Produção não encontrada' };
+      if (rec.status !== PROD_STATUS.ENTRADA_REALIZADA) {
+        return { ok: false, error: 'Este lote não possui entrada realizada para desfazer.' };
+      }
+
+      const anterior = {
+        status: rec.status,
+        entradaData: rec.entradaData,
+        entradaHora: rec.entradaHora,
+        entradaUsuarioId: rec.entradaUsuarioId
+      };
+
+      const entIdx = (db.entradas || []).findIndex((e) => e.producaoId === rec.id);
+      let removedEntrada = null;
+      if (entIdx !== -1) {
+        removedEntrada = db.entradas.splice(entIdx, 1)[0];
+      }
+
+      delete rec.entradaData;
+      delete rec.entradaHora;
+      delete rec.entradaUsuarioId;
+
+      if (rec.quantidadeConferida !== null && rec.quantidadeConferida !== undefined) {
+        rec.status = Number(rec.quantidadeConferida) === Number(rec.quantidadeAproveitavel)
+          ? PROD_STATUS.CONFERIDO
+          : PROD_STATUS.DIVERGENCIA;
+      } else {
+        rec.status = PROD_STATUS.PRODUZIDO;
+      }
+
+      rec.alteradoPorId = actorId;
+      rec.alteradoEm = new Date().toISOString();
+
+      addAuditLog(db, 'entrada', rec.id, 'DESFAZER_ENTRADA', actorId, actorName, anterior, {
+        status: rec.status
+      }, p.motivo || 'Entrada desfeita pelo usuário (estorno)');
+      result.record = rec;
+      result.removedEntrada = removedEntrada;
+      break;
+    }
+
+    case 'DELETE_PRODUCTION': {
+      const rec = db.producoes.find((r) => r.id === p.producaoId);
+      if (!rec) return { ok: false, error: 'Produção não encontrada' };
+      if (rec.status === PROD_STATUS.ENTRADA_REALIZADA) {
+        return { ok: false, error: 'Não é possível excluir um lote com entrada já realizada. Desfaça a entrada primeiro.' };
+      }
+
+      const idx = db.producoes.findIndex((r) => r.id === p.producaoId);
+      const removed = db.producoes.splice(idx, 1)[0];
+      db.quebras = (db.quebras || []).filter((q) => q.producaoId !== p.producaoId);
+
+      addAuditLog(db, 'producao', p.producaoId, 'EXCLUIR', actorId, actorName, {
+        produtoId: removed.produtoId,
+        quantidade: removed.quantidade
+      }, null, p.motivo || 'Produção excluída por engano');
+      result.deletedId = p.producaoId;
       break;
     }
 

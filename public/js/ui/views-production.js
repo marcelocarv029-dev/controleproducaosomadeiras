@@ -13,10 +13,11 @@ import {
   getAllowedSectorsForUser,
   canRegisterProduction,
   canRegisterBreakage,
+  canCorrectProduction,
   parseVoiceProduction,
   getRecordProduct
 } from '../logic.js';
-import { renderStatusPill, showToast, openModal, closeModal, compressImageFile } from './components.js';
+import { renderStatusPill, showToast, openModal, closeModal, compressImageFile, openCorrectionModal } from './components.js';
 import { startVoiceCapture } from '../voice.js';
 import { PRODUCT_PHOTOS } from '../seed.js';
 
@@ -337,7 +338,7 @@ export function startVoiceProductionFlow({ db, user, onMutate, navigate }) {
   });
 }
 
-function renderSectorItemCard(rec, prod, userMap, canBreak) {
+function renderSectorItemCard(rec, prod, userMap, canBreak, canCorrect = true) {
   const s = computeProductionSummary(rec);
   const resp = userMap.get(rec.usuarioId)?.nome || 'Operador';
   return `
@@ -372,11 +373,18 @@ function renderSectorItemCard(rec, prod, userMap, canBreak) {
         </div>
       </div>
 
-      ${canBreak && !s.entradaRealizada ? `
-        <button type="button" class="btn btn-soft-amber btn-sm btn-block btn-break-item" data-prod-reg-id="${rec.id}">
-          ⚠️ REGISTRAR QUEBRA NESTE LOTE
-        </button>
-      ` : ''}
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        ${canCorrect ? `
+          <button type="button" class="btn btn-outline btn-sm btn-edit-prod-rec" data-prod-reg-id="${rec.id}" style="flex:1;">
+            ✏️ Corrigir
+          </button>
+        ` : ''}
+        ${canBreak && !s.entradaRealizada ? `
+          <button type="button" class="btn btn-soft-amber btn-sm btn-break-item" data-prod-reg-id="${rec.id}" style="flex:1;">
+            ⚠️ Quebra
+          </button>
+        ` : ''}
+      </div>
     </div>
   `;
 }
@@ -460,6 +468,13 @@ export function renderSectorProductionView({ db, user, sector, navigate, onMutat
           navigate('registrar-quebra', { sector, producaoId: btn.dataset.prodRegId });
         });
       });
+
+      document.querySelectorAll('.btn-edit-prod-rec').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const rec = db.producoes.find((r) => r.id === btn.dataset.prodRegId);
+          if (rec) openCorrectionModal({ rec, db, user, onMutate });
+        });
+      });
     }
   };
 }
@@ -518,6 +533,12 @@ export function renderTodayProductionHubView({ db, user, navigate, onMutate }) {
       document.querySelectorAll('.btn-break-item').forEach((btn) => {
         btn.addEventListener('click', () => {
           navigate('registrar-quebra', { producaoId: btn.dataset.prodRegId });
+        });
+      });
+      document.querySelectorAll('.btn-edit-prod-rec').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const rec = db.producoes.find((r) => r.id === btn.dataset.prodRegId);
+          if (rec) openCorrectionModal({ rec, db, user, onMutate });
         });
       });
     }

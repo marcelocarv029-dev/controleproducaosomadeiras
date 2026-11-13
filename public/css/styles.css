@@ -907,3 +907,107 @@ img {
 .fw-800 {
   font-weight: 800;
 }
+
+/* ==========================================================================
+   Estilos de Impressão e Relatórios (@media print)
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 8mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar navegação, botões de ação na tela, cabeçalho do app e rodapé */
+  .topbar,
+  .bottom-nav,
+  .chip-row,
+  .no-print,
+  #rep-print-btn,
+  #rep-export-csv,
+  #rep-controls-card,
+  #toast-container,
+  .modal-backdrop,
+  .modal-dialog {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .card, .board-card, .kpi-card {
+    border: 1px solid #999 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid;
+  }
+
+  .kpi-value {
+    color: #000000 !important;
+  }
+
+  .table-print {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+    color: #000000 !important;
+  }
+
+  .table-print th, .table-print td {
+    border: 1px solid #777 !important;
+    padding: 4px 6px !important;
+    color: #000000 !important;
+  }
+
+  .table-print th {
+    background-color: #f0f0f0 !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .table-print tr {
+    page-break-inside: avoid;
+  }
+
+  .print-signatures {
+    margin-top: 30px !important;
+    padding-top: 15px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 15px !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-signature-box {
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  .print-signature-box div {
+    border-top: 1px solid #000000 !important;
+    padding-top: 5px !important;
+    font-size: 8pt !important;
+    font-weight: 700 !important;
+    color: #000000 !important;
+  }
+
+  .pill {
+    border: 1px solid #555 !important;
+    background: transparent !important;
+    color: #000000 !important;
+    font-weight: 700 !important;
+    font-size: 7.5pt !important;
+  }
+}

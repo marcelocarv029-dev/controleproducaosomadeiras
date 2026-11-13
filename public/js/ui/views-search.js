@@ -1,4 +1,12 @@
-import { escapeHtml, formatDateBR, formatNumber } from '../utils.js';
+import {
+  escapeHtml,
+  formatDateBR,
+  formatNumber,
+  getLocalDateStr,
+  getLocalTimeStr,
+  getMonthBounds,
+  addDays
+} from '../utils.js';
 import {
   SECTORS,
   SECTOR_LABELS,
@@ -301,26 +309,143 @@ export function renderHistoryView({ db, user }) {
   };
 }
 
-export function renderReportsView({ db }) {
-  let period = 'mes';
+export function renderReportsView({ db, user }) {
   const prodMap = new Map(db.produtos.map((p) => [p.id, p]));
+  const userMap = new Map(db.usuarios.map((u) => [u.id, u]));
+
+  const todayStr = getLocalDateStr();
+  const currentMonthStr = todayStr.slice(0, 7);
+
+  let mode = 'dia'; // 'dia' | 'mes' | 'hoje' | '7dias' | 'mes_atual' | 'mes_anterior' | 'personalizado'
+  let selectedDate = todayStr;
+  let selectedMonth = currentMonthStr;
+  let customStart = todayStr;
+  let customEnd = todayStr;
+  let filterSector = 'ALL';
+  let filterDest = 'ALL';
+
+  function getRangeAndLabel() {
+    let start = todayStr;
+    let end = todayStr;
+    let label = '';
+
+    if (mode === 'dia') {
+      start = selectedDate || todayStr;
+      end = selectedDate || todayStr;
+      label = `Dia ${formatDateBR(start)}`;
+    } else if (mode === 'mes') {
+      const parts = (selectedMonth || currentMonthStr).split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const lastDay = new Date(y, m, 0).getDate();
+      start = `${parts[0]}-${String(m).padStart(2, '0')}-01`;
+      end = `${parts[0]}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      label = `Mês de ${monthNames[m - 1] || m}/${y}`;
+    } else if (mode === 'hoje') {
+      start = todayStr;
+      end = todayStr;
+      label = `Hoje (${formatDateBR(todayStr)})`;
+    } else if (mode === '7dias') {
+      start = addDays(todayStr, -6);
+      end = todayStr;
+      label = `Últimos 7 Dias (${formatDateBR(start)} a ${formatDateBR(end)})`;
+    } else if (mode === 'mes_atual') {
+      const bounds = getMonthBounds(new Date(), 0);
+      start = bounds.start;
+      end = bounds.end;
+      label = `Este Mês (${formatDateBR(start)} a ${formatDateBR(end)})`;
+    } else if (mode === 'mes_anterior') {
+      const bounds = getMonthBounds(new Date(), -1);
+      start = bounds.start;
+      end = bounds.end;
+      label = `Mês Anterior (${formatDateBR(start)} a ${formatDateBR(end)})`;
+    } else if (mode === 'personalizado') {
+      start = customStart || todayStr;
+      end = customEnd || todayStr;
+      label = `Período de ${formatDateBR(start)} a ${formatDateBR(end)}`;
+    }
+
+    return { start, end, label };
+  }
+
+  function getFilteredItems() {
+    const { start, end } = getRangeAndLabel();
+    return db.producoes.filter((r) => {
+      const d = r.data || '';
+      if (d < start || d > end) return false;
+      if (filterSector !== 'ALL' && r.setor !== filterSector) return false;
+      if (filterDest === 'ESTOQUE' && r.tipoDestino === 'PEDIDO') return false;
+      if (filterDest === 'PEDIDO' && r.tipoDestino !== 'PEDIDO') return false;
+      return true;
+    }).sort((a, b) => `${b.data} ${b.hora}`.localeCompare(`${a.data} ${a.hora}`));
+  }
 
   return {
     html: `
       <div class="main-content">
-        <div class="page-header">
+        <div class="page-header no-print">
           <div>
-            <h1 class="page-title">📊 RELATÓRIOS</h1>
-            <div class="page-date">Consolidado de Produção, Quebras, Divergências e Entradas</div>
+            <h1 class="page-title">📊 RELATÓRIOS DE PRODUÇÃO</h1>
+            <div class="page-date">Emissão e impressão de relatórios diários ou mensais</div>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="rep-export-csv">⬇️ Exportar CSV</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary btn-sm" id="rep-print-btn">🖨️ IMPRIMIR RELATÓRIO</button>
+            <button type="button" class="btn btn-outline btn-sm" id="rep-export-csv">⬇️ Exportar CSV</button>
+          </div>
         </div>
 
-        <div class="chip-row" id="rep-per-chips">
-          <button type="button" class="chip" data-per="hoje">Hoje</button>
-          <button type="button" class="chip" data-per="7dias">7 dias</button>
-          <button type="button" class="chip active" data-per="mes">Este mês</button>
-          <button type="button" class="chip" data-per="mes_anterior">Mês anterior</button>
+        <div class="card no-print" id="rep-controls-card" style="margin-bottom:16px;">
+          <div class="fw-800" style="margin-bottom:10px;font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">
+            Período e Filtros do Relatório
+          </div>
+
+          <div class="chip-row" id="rep-mode-chips" style="margin-bottom:12px;">
+            <button type="button" class="chip active" data-mode="dia">📅 Por Dia</button>
+            <button type="button" class="chip" data-mode="mes">🗓️ Por Mês</button>
+            <button type="button" class="chip" data-mode="hoje">Hoje</button>
+            <button type="button" class="chip" data-mode="7dias">7 dias</button>
+            <button type="button" class="chip" data-mode="mes_atual">Este mês</button>
+            <button type="button" class="chip" data-mode="mes_anterior">Mês anterior</button>
+            <button type="button" class="chip" data-mode="personalizado">Personalizado</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;align-items:flex-end;">
+            <div id="rep-box-day" class="field" style="margin-bottom:0;">
+              <label>Escolha a Data</label>
+              <input type="date" id="rep-day-val" class="input" value="${todayStr}" />
+            </div>
+
+            <div id="rep-box-month" class="field" style="margin-bottom:0;display:none;">
+              <label>Escolha o Mês / Ano</label>
+              <input type="month" id="rep-month-val" class="input" value="${currentMonthStr}" />
+            </div>
+
+            <div id="rep-box-custom" class="field" style="margin-bottom:0;display:none;">
+              <div style="display:flex;gap:6px;">
+                <div style="flex:1;"><label>De</label><input type="date" id="rep-cust-start" class="input" value="${todayStr}" /></div>
+                <div style="flex:1;"><label>Até</label><input type="date" id="rep-cust-end" class="input" value="${todayStr}" /></div>
+              </div>
+            </div>
+
+            <div class="field" style="margin-bottom:0;">
+              <label>Setor</label>
+              <select id="rep-filter-sector" class="select">
+                <option value="ALL">Todos os setores</option>
+                <option value="${SECTORS.PRE_MOLDADOS}">🧱 Pré-Moldados</option>
+                <option value="${SECTORS.MARCENARIA}">🪵 Marcenaria</option>
+              </select>
+            </div>
+
+            <div class="field" style="margin-bottom:0;">
+              <label>Destino</label>
+              <select id="rep-filter-dest" class="select">
+                <option value="ALL">Todos os destinos</option>
+                <option value="ESTOQUE">📦 Para Estoque</option>
+                <option value="PEDIDO">📋 Para Pedido</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div id="rep-body"></div>
@@ -328,86 +453,279 @@ export function renderReportsView({ db }) {
     `,
     mount: () => {
       const bodyEl = document.getElementById('rep-body');
+      const boxDay = document.getElementById('rep-box-day');
+      const boxMonth = document.getElementById('rep-box-month');
+      const boxCustom = document.getElementById('rep-box-custom');
 
-      function getFiltered() {
-        return filterByPeriod(db.producoes, period);
+      function updateControlBoxes() {
+        boxDay.style.display = mode === 'dia' ? 'block' : 'none';
+        boxMonth.style.display = mode === 'mes' ? 'block' : 'none';
+        boxCustom.style.display = mode === 'personalizado' ? 'block' : 'none';
       }
 
       function renderRep() {
-        const items = getFiltered();
-        const totals = computeSectorTotals(items);
-        const days = computeDailyProduction(items);
-        const divs = items.filter((r) => computeProductionSummary(r).temDivergencia);
+        const { label } = getRangeAndLabel();
+        const items = getFilteredItems();
+
+        let totalProd = 0;
+        let totalQuebra = 0;
+        let totalAprov = 0;
+        let totalConf = 0;
+        let totalEntradas = 0;
+        let totalPendentes = 0;
+        let totalParaEstoque = 0;
+        let totalParaPedido = 0;
+
+        const divs = [];
+
+        items.forEach((r) => {
+          const s = computeProductionSummary(r);
+          totalProd += s.produzida;
+          totalQuebra += s.quebrada;
+          totalAprov += s.aproveitavel;
+          if (s.conferida != null) totalConf += s.conferida;
+          if (s.entradaRealizada) totalEntradas += s.quantidadeEfetivaEntrada;
+          else totalPendentes += s.aproveitavel;
+
+          if (r.tipoDestino === 'PEDIDO') totalParaPedido += s.produzida;
+          else totalParaEstoque += s.produzida;
+
+          if (s.temDivergencia) divs.push({ r, s });
+        });
+
+        const percQuebra = totalProd > 0 ? ((totalQuebra / totalProd) * 100).toFixed(1) : '0.0';
+
+        const sectorLabelText = filterSector === 'ALL'
+          ? 'Todos os Setores'
+          : (SECTOR_LABELS[filterSector] || filterSector);
+
+        const destLabelText = filterDest === 'ALL'
+          ? 'Todos os Destinos'
+          : (filterDest === 'PEDIDO' ? 'Somente Pedidos' : 'Somente Estoque');
 
         bodyEl.innerHTML = `
-          <div class="grid-cards" style="margin-bottom:16px;">
-            <div class="card">
-              <div class="fw-800" style="margin-bottom:10px;">🧱 PRÉ-MOLDADOS</div>
-              <div class="stack" style="gap:6px;font-weight:700;">
-                <div class="row-between"><span>Total produzido:</span><strong>${formatNumber(totals.premoldados.produzidos)}</strong></div>
-                <div class="row-between"><span>Total quebrado:</span><strong style="color:var(--amber);">${formatNumber(totals.premoldados.quebrados)}</strong></div>
-                <div class="row-between"><span>Total aproveitável:</span><strong>${formatNumber(totals.premoldados.aproveitaveis)}</strong></div>
-                <div class="row-between"><span>Total conferido:</span><strong style="color:var(--blue);">${formatNumber(totals.premoldados.conferidos)}</strong></div>
-                <div class="row-between"><span>Total com entrada:</span><strong style="color:var(--green);">${formatNumber(totals.premoldados.entradasRealizadas)}</strong></div>
-                <div class="row-between"><span>Total pendente:</span><strong style="color:var(--orange);">${formatNumber(totals.premoldados.pendentes)}</strong></div>
+          <!-- Printable Header -->
+          <div class="print-doc-header" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:1.35rem;font-weight:900;letter-spacing:0.5px;color:var(--text);">
+                  SOMADEIRAS — CONTROLE DE PRODUÇÃO
+                </div>
+                <div style="font-size:1.1rem;font-weight:800;color:var(--blue);margin-top:2px;">
+                  RELATÓRIO DE PRODUÇÃO: ${escapeHtml(label)}
+                </div>
+                <div style="font-size:0.85rem;color:var(--text-muted);font-weight:700;margin-top:4px;">
+                  Setor: <strong style="color:var(--text);">${escapeHtml(sectorLabelText)}</strong> •
+                  Destino: <strong style="color:var(--text);">${escapeHtml(destLabelText)}</strong>
+                </div>
               </div>
-            </div>
-
-            <div class="card">
-              <div class="fw-800" style="margin-bottom:10px;">🪵 MARCENARIA</div>
-              <div class="stack" style="gap:6px;font-weight:700;">
-                <div class="row-between"><span>Total produzido:</span><strong>${formatNumber(totals.marcenaria.produzidos)}</strong></div>
-                <div class="row-between"><span>Total conferido:</span><strong style="color:var(--blue);">${formatNumber(totals.marcenaria.conferidos)}</strong></div>
-                <div class="row-between"><span>Total com entrada:</span><strong style="color:var(--green);">${formatNumber(totals.marcenaria.entradasRealizadas)}</strong></div>
-                <div class="row-between"><span>Total pendente:</span><strong style="color:var(--orange);">${formatNumber(totals.marcenaria.pendentes)}</strong></div>
+              <div style="text-align:right;font-size:0.82rem;color:var(--text-muted);font-weight:600;line-height:1.4;">
+                <div>📅 <strong>Emissão:</strong> ${formatDateBR(todayStr)} às ${getLocalTimeStr()}</div>
+                <div>👤 <strong>Usuário:</strong> ${escapeHtml(user?.nome || 'Sistema')}</div>
+                <div>🏭 <strong>Unidade:</strong> Somadeiras (Pré-Moldados & Marcenaria)</div>
               </div>
             </div>
           </div>
 
-          <div class="section-title">🔴 Divergências no Período (${divs.length})</div>
-          ${divs.length === 0 ? `<div class="empty-state">Nenhuma divergência registrada neste período.</div>` : `
+          <!-- KPI Summary Grid -->
+          <div class="kpi-grid" style="margin-bottom:16px;">
+            <div class="kpi-card">
+              <span class="kpi-label">Total Produzido</span>
+              <span class="kpi-value">${formatNumber(totalProd)}</span>
+              <span class="text-muted" style="font-size:0.8rem;font-weight:700;">${items.length} lote(s) registrados</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">Total Quebras</span>
+              <span class="kpi-value" style="color:${totalQuebra > 0 ? 'var(--amber)' : 'inherit'};">${formatNumber(totalQuebra)}</span>
+              <span class="text-muted" style="font-size:0.8rem;font-weight:700;">${percQuebra}% de perda</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">Total Aproveitável</span>
+              <span class="kpi-value" style="color:var(--green);">${formatNumber(totalAprov)}</span>
+              <span class="text-muted" style="font-size:0.8rem;font-weight:700;">Apto para uso/venda</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-label">Entradas no Estoque</span>
+              <span class="kpi-value" style="color:var(--blue);">${formatNumber(totalEntradas)}</span>
+              <span class="text-muted" style="font-size:0.8rem;font-weight:700;">${formatNumber(totalPendentes)} pendente(s)</span>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-weight:700;font-size:0.9rem;">
+              <div>📦 <strong>Destinado ao Estoque:</strong> ${formatNumber(totalParaEstoque)} un</div>
+              <div>📋 <strong>Destinado a Pedidos:</strong> ${formatNumber(totalParaPedido)} un</div>
+              <div>🔴 <strong>Divergências no Período:</strong> ${divs.length} ocorrência(s)</div>
+            </div>
+          </div>
+
+          ${divs.length > 0 ? `
+            <div class="section-title" style="margin-top:14px;color:var(--red);">🔴 Divergências Registradas (${divs.length})</div>
             <div class="stack" style="margin-bottom:16px;">
-              ${divs.map((r) => {
+              ${divs.map(({ r, s }) => {
                 const p = getRecordProduct(r, prodMap);
-                const s = computeProductionSummary(r);
                 return `
                   <div class="div-alert">
-                    <strong>${escapeHtml(p?.nome || '')}</strong> (${formatDateBR(r.data)}) —
-                    Esperado: ${s.aproveitavel} | Conferido: ${s.conferida} | Diferença: ${s.diferenca > 0 ? '+' : ''}${s.diferenca}
+                    <strong>${escapeHtml(p?.nome || 'Produto')}</strong> (${formatDateBR(r.data)} às ${r.hora}) —
+                    Aproveitável: <strong>${s.aproveitavel}</strong> | Conferido: <strong>${s.conferida}</strong> |
+                    Diferença: <strong style="text-decoration:underline;">${s.diferenca > 0 ? '+' : ''}${s.diferenca}</strong>
+                    ${r.motivoDivergencia ? `<br><small>Motivo: ${escapeHtml(r.motivoDivergencia)}</small>` : ''}
                   </div>
                 `;
               }).join('')}
             </div>
-          `}
+          ` : ''}
 
-          <div class="section-title">📆 Resumo Diário</div>
-          ${days.length === 0 ? `<div class="empty-state">Sem produções no período.</div>` : `
-            <div class="stack">
-              ${days.map((d) => `
-                <div class="card row-between" style="padding:12px 14px;">
-                  <span class="fw-800">${formatDateBR(d.data)}</span>
-                  <span class="fw-700">${formatNumber(d.totalProduzido)} prod. • ${formatNumber(d.totalEntradas)} entradas</span>
-                </div>
-              `).join('')}
+          <!-- Detailed Table -->
+          <div class="section-title" style="margin-top:14px;">📋 Detalhamento dos Lotes Produzidos</div>
+          ${items.length === 0 ? `
+            <div class="empty-state">Nenhuma produção registrada no período selecionado.</div>
+          ` : `
+            <div style="overflow-x:auto;margin-bottom:16px;background:var(--surface);border-radius:12px;border:1px solid var(--border);">
+              <table class="table-print" style="width:100%;border-collapse:collapse;font-size:0.85rem;text-align:left;">
+                <thead>
+                  <tr style="background:var(--surface-alt);border-bottom:2px solid var(--border);">
+                    <th style="padding:10px 8px;font-weight:800;">Data/Hora</th>
+                    <th style="padding:10px 8px;font-weight:800;">Setor</th>
+                    <th style="padding:10px 8px;font-weight:800;">Produto</th>
+                    <th style="padding:10px 8px;font-weight:800;">Destino</th>
+                    <th style="padding:10px 8px;font-weight:800;text-align:right;">Produzido</th>
+                    <th style="padding:10px 8px;font-weight:800;text-align:right;">Quebra</th>
+                    <th style="padding:10px 8px;font-weight:800;text-align:right;">Aproveitável</th>
+                    <th style="padding:10px 8px;font-weight:800;text-align:right;">Conferido</th>
+                    <th style="padding:10px 8px;font-weight:800;text-align:center;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.map((r, idx) => {
+                    const prod = getRecordProduct(r, prodMap);
+                    const s = computeProductionSummary(r);
+                    const resp = userMap.get(r.usuarioId)?.nome || 'Operador';
+                    const isEven = idx % 2 === 0;
+
+                    return `
+                      <tr style="border-bottom:1px solid var(--border);background:${isEven ? 'transparent' : 'var(--surface-alt)'};">
+                        <td style="padding:8px;font-weight:700;white-space:nowrap;">
+                          ${formatDateBR(r.data)} <span class="text-muted">${r.hora}</span>
+                        </td>
+                        <td style="padding:8px;font-weight:700;white-space:nowrap;">
+                          ${r.setor === SECTORS.PRE_MOLDADOS ? '🧱 Pré-Mold.' : '🪵 Marcen.'}
+                        </td>
+                        <td style="padding:8px;font-weight:800;">
+                          ${escapeHtml(prod?.nome || 'Produto')}
+                          <div class="text-muted" style="font-size:0.75rem;font-weight:600;">Resp: ${escapeHtml(resp)}</div>
+                        </td>
+                        <td style="padding:8px;white-space:nowrap;">
+                          ${r.tipoDestino === 'PEDIDO'
+                            ? `<span style="display:inline-block;padding:2px 6px;border-radius:6px;background:#EFF6FF;color:var(--blue);font-weight:800;font-size:0.8rem;">📋 Pedido #${escapeHtml(r.numeroPedido || '')}</span>`
+                            : `<span style="display:inline-block;padding:2px 6px;border-radius:6px;background:#F3F4F6;color:#4B5563;font-weight:700;font-size:0.8rem;">📦 Estoque</span>`
+                          }
+                        </td>
+                        <td style="padding:8px;text-align:right;font-weight:800;">${formatNumber(s.produzida)}</td>
+                        <td style="padding:8px;text-align:right;font-weight:800;color:${s.quebrada > 0 ? 'var(--amber)' : 'inherit'};">${formatNumber(s.quebrada)}</td>
+                        <td style="padding:8px;text-align:right;font-weight:800;color:var(--green);">${formatNumber(s.aproveitavel)}</td>
+                        <td style="padding:8px;text-align:right;font-weight:800;color:var(--blue);">${s.conferida != null ? formatNumber(s.conferida) : '-'}</td>
+                        <td style="padding:8px;text-align:center;">
+                          ${renderStatusPill(s.statusTone, s.statusBadge)}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background:var(--surface-alt);font-weight:900;border-top:2px solid var(--border);">
+                    <td colspan="4" style="padding:10px 8px;">TOTAL GERAL (${items.length} lotes)</td>
+                    <td style="padding:10px 8px;text-align:right;">${formatNumber(totalProd)}</td>
+                    <td style="padding:10px 8px;text-align:right;color:var(--amber);">${formatNumber(totalQuebra)}</td>
+                    <td style="padding:10px 8px;text-align:right;color:var(--green);">${formatNumber(totalAprov)}</td>
+                    <td style="padding:10px 8px;text-align:right;color:var(--blue);">${formatNumber(totalConf)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           `}
+
+          <!-- Signatures for printed document -->
+          <div class="print-signatures" style="margin-top:40px;padding-top:20px;border-top:1px dashed var(--border);display:flex;justify-content:space-between;gap:20px;">
+            <div class="print-signature-box" style="flex:1;text-align:center;">
+              <div style="border-top:1px solid #444;margin:0 12px;padding-top:6px;font-weight:800;font-size:0.82rem;">
+                Responsável pela Produção
+              </div>
+            </div>
+            <div class="print-signature-box" style="flex:1;text-align:center;">
+              <div style="border-top:1px solid #444;margin:0 12px;padding-top:6px;font-weight:800;font-size:0.82rem;">
+                Conferente / Almoxarifado
+              </div>
+            </div>
+            <div class="print-signature-box" style="flex:1;text-align:center;">
+              <div style="border-top:1px solid #444;margin:0 12px;padding-top:6px;font-weight:800;font-size:0.82rem;">
+                Visto da Direção / Gerência
+              </div>
+            </div>
+          </div>
         `;
       }
 
-      document.querySelectorAll('#rep-per-chips .chip').forEach((btn) => {
+      // Mode chips handling
+      document.querySelectorAll('#rep-mode-chips .chip').forEach((btn) => {
         btn.addEventListener('click', () => {
-          document.querySelectorAll('#rep-per-chips .chip').forEach((c) => c.classList.remove('active'));
+          document.querySelectorAll('#rep-mode-chips .chip').forEach((c) => c.classList.remove('active'));
           btn.classList.add('active');
-          period = btn.dataset.per;
+          mode = btn.dataset.mode;
+          updateControlBoxes();
           renderRep();
         });
       });
 
+      // Filter events
+      document.getElementById('rep-day-val')?.addEventListener('change', (e) => {
+        selectedDate = e.target.value;
+        renderRep();
+      });
+
+      document.getElementById('rep-month-val')?.addEventListener('change', (e) => {
+        selectedMonth = e.target.value;
+        renderRep();
+      });
+
+      document.getElementById('rep-cust-start')?.addEventListener('change', (e) => {
+        customStart = e.target.value;
+        renderRep();
+      });
+
+      document.getElementById('rep-cust-end')?.addEventListener('change', (e) => {
+        customEnd = e.target.value;
+        renderRep();
+      });
+
+      document.getElementById('rep-filter-sector')?.addEventListener('change', (e) => {
+        filterSector = e.target.value;
+        renderRep();
+      });
+
+      document.getElementById('rep-filter-dest')?.addEventListener('change', (e) => {
+        filterDest = e.target.value;
+        renderRep();
+      });
+
+      // Print Button
+      document.getElementById('rep-print-btn')?.addEventListener('click', () => {
+        window.print();
+      });
+
+      // CSV Export Button
       document.getElementById('rep-export-csv')?.addEventListener('click', () => {
-        const rows = [['Data', 'Hora', 'Setor', 'Codigo', 'Produto', 'Destino', 'Pedido', 'Produzida', 'Quebrada', 'Aproveitavel', 'Conferida', 'Status']];
-        for (const r of getFiltered()) {
+        const { label } = getRangeAndLabel();
+        const items = getFilteredItems();
+        const rows = [
+          ['Data', 'Hora', 'Setor', 'Codigo', 'Produto', 'Destino', 'NumeroPedido', 'Produzida', 'Quebrada', 'Aproveitavel', 'Conferida', 'Status', 'Responsavel']
+        ];
+
+        for (const r of items) {
           const p = getRecordProduct(r, prodMap);
           const s = computeProductionSummary(r);
+          const resp = userMap.get(r.usuarioId)?.nome || '';
           rows.push([
             r.data,
             r.hora,
@@ -420,20 +738,26 @@ export function renderReportsView({ db }) {
             s.quebrada,
             s.aproveitavel,
             s.conferida ?? '',
-            r.status
+            r.status,
+            `"${resp.replace(/"/g, '""')}"`
           ]);
         }
+
         const csv = rows.map((row) => row.join(';')).join('\n');
         const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `relatorio-producao-${period}.csv`;
+        const cleanLabel = label.replace(/[^a-zA-Z0-9]/g, '_');
+        a.download = `relatorio-producao-${cleanLabel}.csv`;
         a.click();
         URL.revokeObjectURL(url);
       });
 
+      updateControlBoxes();
       renderRep();
     }
+  };
+}
   };
 }

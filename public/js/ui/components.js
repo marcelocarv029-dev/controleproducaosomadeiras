@@ -1,5 +1,5 @@
-import { escapeHtml } from '../utils.js';
-import { ROLES, canAccessModule } from '../logic.js';
+import { escapeHtml, formatDateBR, formatNumber } from '../utils.js';
+import { ROLES, PROD_STATUS, canAccessModule, canUndoEntry, getRecordProduct } from '../logic.js';
 import { SYNC_STATUS } from '../sync.js';
 
 export function showToast(message, tone = 'success', duration = 2600) {
@@ -194,5 +194,175 @@ export function compressImageFile(file, maxDim = 640) {
     };
     reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
     reader.readAsDataURL(file);
+  });
+}
+
+export function openCorrectionModal({ rec, db, user, onMutate, onDone }) {
+  const prodMap = new Map((db.produtos || []).map((p) => [p.id, p]));
+  const prod = getRecordProduct(rec, prodMap);
+  const userMap = new Map((db.usuarios || []).map((u) => [u.id, u]));
+  const resp = userMap.get(rec.usuarioId)?.nome || 'Operador';
+  const isEntradaRealizada = rec.status === PROD_STATUS.ENTRADA_REALIZADA;
+  const userCanUndo = canUndoEntry(user);
+  let selectedDest = rec.tipoDestino || 'ESTOQUE';
+
+  openModal({
+    title: `✏️ Corrigir Lote: ${prod?.nome || 'Produto'}`,
+    bodyHtml: `
+      <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;">
+        <div class="row-between">
+          <span class="fw-800" style="font-size:1.05rem;">${escapeHtml(prod?.nome || '')}</span>
+          <span style="font-size:0.8rem;font-weight:700;color:var(--text-muted);">${formatDateBR(rec.data)} ${rec.hora}</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--text-muted);font-weight:700;margin-top:2px;">
+          Lançado por: ${escapeHtml(resp)} • Status: <strong>${rec.status}</strong>
+        </div>
+      </div>
+
+      <form id="shared-corr-form">
+        <div class="field">
+          <label for="sc-qtd">Quantidade Produzida (${escapeHtml(prod?.unidade || 'UN')})</label>
+          <input id="sc-qtd" type="number" min="1" step="any" inputmode="decimal" class="input input-qty" required value="${rec.quantidade}" style="min-height:50px;font-size:1.35rem;" />
+        </div>
+
+        <div class="field">
+          <label>Destino da Produção</label>
+          <div class="segmented-control" id="sc-destino-seg">
+            <button type="button" class="segmented-btn ${selectedDest === 'ESTOQUE' ? 'active' : ''}" data-dest="ESTOQUE">📦 Para Estoque</button>
+            <button type="button" class="segmented-btn ${selectedDest === 'PEDIDO' ? 'active' : ''}" data-dest="PEDIDO">📋 Para Pedido</button>
+          </div>
+        </div>
+
+        <div class="field" id="sc-box-pedido" style="${selectedDest === 'PEDIDO' ? '' : 'display:none;'}">
+          <label for="sc-numpedido">Número do Pedido</label>
+          <input id="sc-numpedido" class="input" type="text" value="${escapeHtml(rec.numeroPedido || '')}" placeholder="Ex: 1045" style="font-weight:700;" />
+        </div>
+
+        <div class="field">
+          <label for="sc-motivo">Motivo do Ajuste / Correção</label>
+          <input id="sc-motivo" class="input" type="text" required placeholder="Ex: Digitação errada de quantidade / pedido" />
+        </div>
+
+        <button type="submit" class="btn btn-success btn-block btn-lg" style="margin-top:14px;">
+          💾 SALVAR CORREÇÃO
+        </button>
+      </form>
+
+      ${isEntradaRealizada && userCanUndo ? `
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+          <button type="button" class="btn btn-soft-amber btn-block" id="sc-btn-undo-entry">
+            ↩️ Desfazer Entrada no Estoque (Estorno)
+          </button>
+          <div style="font-size:0.78rem;color:var(--text-muted);font-weight:600;margin-top:4px;text-align:center;">
+            Se o botão de entrada foi apertado por engano, toque acima para cancelar a entrada.
+          </div>
+        </div>
+      ` : ''}
+
+      ${!isEntradaRealizada ? `
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+          <button type="button" class="btn btn-outline btn-sm btn-block text-danger" id="sc-btn-delete-prod" style="border-color:#FCA5A5;color:var(--red);">
+            🗑️ Excluir este lote lançado por engano
+          </button>
+        </div>
+      ` : ''}
+    `,
+    onMount: () => {
+      const destBox = document.getElementById('sc-box-pedido');
+      const numPedInp = document.getElementById('sc-numpedido');
+
+      document.querySelectorAll('#sc-destino-seg .segmented-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#sc-destino-seg .segmented-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedDest = btn.dataset.dest;
+          if (selectedDest === 'PEDIDO') {
+            destBox.style.display = 'block';
+            numPedInp?.focus();
+          } else {
+            destBox.style.display = 'none';
+          }
+        });
+      });
+
+      document.getElementById('shared-corr-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const novaQtd = Number(document.getElementById('sc-qtd').value);
+        if (!novaQtd || novaQtd <= 0) {
+          showToast('Informe uma quantidade válida', 'warning');
+          return;
+        }
+
+        let numPedido = null;
+        if (selectedDest === 'PEDIDO') {
+          numPedido = numPedInp?.value.trim();
+          if (!numPedido) {
+            showToast('Informe o número do pedido', 'warning');
+            numPedInp?.focus();
+            return;
+          }
+        }
+
+        const motivo = document.getElementById('sc-motivo').value.trim();
+        const res = await onMutate('CORRECT_PRODUCTION', {
+          producaoId: rec.id,
+          quantidade: novaQtd,
+          quantidadeQuebrada: rec.quantidadeQuebrada || 0,
+          tipoDestino: selectedDest,
+          numeroPedido: numPedido,
+          motivo: motivo || 'Correção de produção'
+        });
+
+        if (res.ok) {
+          closeModal();
+          showToast('✅ Produção corrigida com sucesso!');
+          if (onDone) onDone();
+        } else {
+          showToast(res.error || 'Erro ao corrigir', 'error');
+        }
+      });
+
+      document.getElementById('sc-btn-undo-entry')?.addEventListener('click', () => {
+        confirmDangerousAction({
+          title: 'Desfazer Entrada no Estoque',
+          message: `Deseja realmente cancelar a entrada no estoque do lote "${prod?.nome || 'Produto'}"? O lote voltará a ficar pendente de entrada.`,
+          confirmLabel: 'Sim, Desfazer Entrada',
+          onConfirm: async () => {
+            const res = await onMutate('UNDO_ENTRY', {
+              producaoId: rec.id,
+              motivo: 'Entrada desfeita pelo usuário (apertada sem querer)'
+            });
+            if (res.ok) {
+              closeModal();
+              showToast('↩️ Entrada desfeita com sucesso!');
+              if (onDone) onDone();
+            } else {
+              showToast(res.error || 'Erro ao desfazer entrada', 'error');
+            }
+          }
+        });
+      });
+
+      document.getElementById('sc-btn-delete-prod')?.addEventListener('click', () => {
+        confirmDangerousAction({
+          title: 'Excluir Produção',
+          message: `Deseja excluir definitivamente este lote de "${prod?.nome || 'Produto'}" lançado por engano?`,
+          confirmLabel: 'Excluir Definitivamente',
+          onConfirm: async () => {
+            const res = await onMutate('DELETE_PRODUCTION', {
+              producaoId: rec.id,
+              motivo: 'Lançado por engano'
+            });
+            if (res.ok) {
+              closeModal();
+              showToast('✅ Lote excluído');
+              if (onDone) onDone();
+            } else {
+              showToast(res.error || 'Erro ao excluir lote', 'error');
+            }
+          }
+        });
+      });
+    }
   });
 }

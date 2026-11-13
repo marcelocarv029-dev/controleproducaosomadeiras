@@ -733,3 +733,89 @@ test('purgeDemoData: elimina definitivamente produções, quebras, entradas e no
   assert.equal(state.usuarios.find((u) => u.id === 'usr_pre').nome, 'Produção Pré-Moldados');
   assert.equal(state.usuarios.some((u) => u.id === 'usr_suino_fake'), false);
 });
+
+test('Correção de erro: Desfazer Entrada (UNDO_ENTRY) reverte status e remove do estoque', () => {
+  const db = createTestDatabase();
+  const reg = db.producoes.find((r) => r.id === 'reg_hoje_1');
+  assert.equal(reg.status, PROD_STATUS.ENTRADA_REALIZADA);
+
+  // Simula entrada no estoque pré-existente
+  db.entradas.push({
+    id: 'ent_reg1',
+    producaoId: reg.id,
+    quantidade: reg.quantidadeAproveitavel,
+    data: reg.data,
+    hora: reg.hora
+  });
+
+  const undoRes = applySyncOp(db, {
+    opId: 'op_undo_1',
+    type: 'UNDO_ENTRY',
+    actorId: 'usr_conf',
+    actorName: 'Conferente',
+    payload: {
+      producaoId: reg.id,
+      motivo: 'Apertou sem querer'
+    }
+  });
+
+  assert.equal(undoRes.ok, true);
+  assert.equal(reg.status, PROD_STATUS.CONFERIDO);
+  assert.equal(Boolean(reg.entradaData), false);
+  assert.equal(db.entradas.some((e) => e.producaoId === reg.id), false);
+
+  // Auditoria registrada
+  const audit = db.historicoAlteracoes.find((a) => a.acao === 'DESFAZER_ENTRADA');
+  assert.ok(audit);
+  assert.equal(audit.motivo, 'Apertou sem querer');
+});
+
+test('Correção de erro: Excluir Produção lançada por engano (DELETE_PRODUCTION)', () => {
+  const db = createTestDatabase();
+  const reg = db.producoes.find((r) => r.id === 'reg_hoje_2');
+  assert.equal(reg.status, PROD_STATUS.PRODUZIDO);
+
+  const delRes = applySyncOp(db, {
+    opId: 'op_del_1',
+    type: 'DELETE_PRODUCTION',
+    actorId: 'usr_pre',
+    actorName: 'Produção Pré-Moldados',
+    payload: {
+      producaoId: reg.id,
+      motivo: 'Lançado produto errado'
+    }
+  });
+
+  assert.equal(delRes.ok, true);
+  assert.equal(db.producoes.some((p) => p.id === reg.id), false);
+
+  // Auditoria registrada
+  const audit = db.historicoAlteracoes.find((a) => a.acao === 'EXCLUIR');
+  assert.ok(audit);
+  assert.equal(audit.motivo, 'Lançado produto errado');
+});
+
+test('Correção de erro: Editar quantidade e tipo de destino (CORRECT_PRODUCTION)', () => {
+  const db = createTestDatabase();
+  const reg = db.producoes.find((r) => r.id === 'reg_hoje_2');
+
+  const corRes = applySyncOp(db, {
+    opId: 'op_cor_1',
+    type: 'CORRECT_PRODUCTION',
+    actorId: 'usr_pre',
+    actorName: 'Produção Pré-Moldados',
+    payload: {
+      producaoId: reg.id,
+      novaQuantidade: 30,
+      tipoDestino: 'PEDIDO',
+      numeroPedido: '12345',
+      motivo: 'Errei a contagem e era para pedido'
+    }
+  });
+
+  assert.equal(corRes.ok, true);
+  assert.equal(reg.quantidade, 30);
+  assert.equal(reg.quantidadeAproveitavel, 30);
+  assert.equal(reg.tipoDestino, 'PEDIDO');
+  assert.equal(reg.numeroPedido, '12345');
+});
