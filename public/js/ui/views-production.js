@@ -56,12 +56,42 @@ export function openNewUnregisteredProductModal({ sector = SECTORS.MARCENARIA, o
           </div>
         </div>
 
-        <button type="submit" class="btn btn-success btn-block btn-lg">SALVAR PRODUÇÃO</button>
+        <div class="field">
+          <label>Destino da Produção</label>
+          <div class="segmented-control" id="up-destino-seg">
+            <button type="button" class="segmented-btn active" data-dest="ESTOQUE">📦 Para Estoque</button>
+            <button type="button" class="segmented-btn" data-dest="PEDIDO">📋 Para Pedido</button>
+          </div>
+        </div>
+
+        <div class="field" id="up-box-pedido" style="display:none;">
+          <label for="up-numpedido">Número do Pedido</label>
+          <input id="up-numpedido" class="input" type="text" placeholder="Ex: 1045" style="font-size:1.1rem;font-weight:700;" />
+        </div>
+
+        <button type="submit" class="btn btn-success btn-block btn-lg" style="margin-top:14px;">SALVAR PRODUÇÃO</button>
       </form>
     `,
     onMount: () => {
       const fileInp = document.getElementById('up-file');
       const prevImg = document.getElementById('up-preview');
+      let selectedDest = 'ESTOQUE';
+      const destBox = document.getElementById('up-box-pedido');
+      const numPedInp = document.getElementById('up-numpedido');
+
+      document.querySelectorAll('#up-destino-seg .segmented-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#up-destino-seg .segmented-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedDest = btn.dataset.dest;
+          if (selectedDest === 'PEDIDO') {
+            destBox.style.display = 'block';
+            numPedInp.focus();
+          } else {
+            destBox.style.display = 'none';
+          }
+        });
+      });
 
       fileInp?.addEventListener('change', async (e) => {
         const f = e.target.files?.[0];
@@ -84,12 +114,24 @@ export function openNewUnregisteredProductModal({ sector = SECTORS.MARCENARIA, o
           return;
         }
 
+        let numPedido = null;
+        if (selectedDest === 'PEDIDO') {
+          numPedido = numPedInp.value.trim();
+          if (!numPedido) {
+            showToast('Informe o número do pedido', 'warning');
+            numPedInp.focus();
+            return;
+          }
+        }
+
         const res = await onMutate('SAVE_UNREGISTERED_PRODUCTION', {
           nome,
           unidade,
           setor: sector,
           foto: fotoData,
-          quantidade
+          quantidade,
+          tipoDestino: selectedDest,
+          numeroPedido: numPedido
         });
 
         if (res.ok) {
@@ -114,10 +156,13 @@ export function startVoiceProductionFlow({ db, user, onMutate, navigate }) {
       const res = await onMutate('SAVE_PRODUCTION', {
         produtoId: parsed.product.id,
         quantidade: parsed.quantity,
+        tipoDestino: parsed.tipoDestino || 'ESTOQUE',
+        numeroPedido: parsed.numeroPedido || null,
         origem: 'voz'
       });
       if (res.ok) {
-        showToast(`✅ Produção registrada: ${parsed.product.nome} — ${parsed.quantity} ${parsed.product.unidade}`);
+        const destTxt = parsed.tipoDestino === 'PEDIDO' ? ` (Pedido #${parsed.numeroPedido})` : '';
+        showToast(`✅ Produção registrada: ${parsed.product.nome} — ${parsed.quantity} ${parsed.product.unidade}${destTxt}`);
       } else {
         showToast(res.error || 'Erro ao salvar', 'error');
       }
@@ -128,6 +173,7 @@ export function startVoiceProductionFlow({ db, user, onMutate, navigate }) {
     const eligibleProducts = db.produtos.filter((p) => p.ativo !== false && allowedSectors.includes(p.setor));
     const selectedId = parsed.product?.id || eligibleProducts[0]?.id || '';
     const qtyVal = parsed.quantity && parsed.quantity > 0 ? parsed.quantity : '';
+    let selectedDest = parsed.tipoDestino || 'ESTOQUE';
 
     openModal({
       title: '🎙️ Confirmar / Corrigir Registro',
@@ -153,12 +199,40 @@ export function startVoiceProductionFlow({ db, user, onMutate, navigate }) {
           <label for="vc-qty">Quantidade</label>
           <input id="vc-qty" type="number" min="1" step="any" class="input input-qty" value="${escapeHtml(qtyVal)}" placeholder="0" />
         </div>
-        <div class="grid-2" style="margin-top:12px;">
+        <div class="field">
+          <label>Destino da Produção</label>
+          <div class="segmented-control" id="vc-destino-seg">
+            <button type="button" class="segmented-btn ${selectedDest === 'PEDIDO' ? '' : 'active'}" data-dest="ESTOQUE">📦 Para Estoque</button>
+            <button type="button" class="segmented-btn ${selectedDest === 'PEDIDO' ? 'active' : ''}" data-dest="PEDIDO">📋 Para Pedido</button>
+          </div>
+        </div>
+        <div class="field" id="vc-box-pedido" style="${selectedDest === 'PEDIDO' ? '' : 'display:none;'}">
+          <label for="vc-numpedido">Número do Pedido</label>
+          <input id="vc-numpedido" class="input" type="text" value="${escapeHtml(parsed.numeroPedido || '')}" placeholder="Ex: 1045" />
+        </div>
+        <div class="grid-2" style="margin-top:16px;">
           <button type="button" class="btn btn-outline" id="vc-retry">🎙️ Falar de Novo</button>
           <button type="button" class="btn btn-success" id="vc-save">SALVAR</button>
         </div>
       `,
       onMount: () => {
+        const destBox = document.getElementById('vc-box-pedido');
+        const numPedInp = document.getElementById('vc-numpedido');
+
+        document.querySelectorAll('#vc-destino-seg .segmented-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#vc-destino-seg .segmented-btn').forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedDest = btn.dataset.dest;
+            if (selectedDest === 'PEDIDO') {
+              destBox.style.display = 'block';
+              numPedInp?.focus();
+            } else {
+              destBox.style.display = 'none';
+            }
+          });
+        });
+
         document.getElementById('vc-retry')?.addEventListener('click', () => {
           closeModal();
           startVoiceProductionFlow({ db, user, onMutate, navigate });
@@ -170,9 +244,22 @@ export function startVoiceProductionFlow({ db, user, onMutate, navigate }) {
             showToast('Informe produto e quantidade válida', 'warning');
             return;
           }
+
+          let numPedido = null;
+          if (selectedDest === 'PEDIDO') {
+            numPedido = numPedInp?.value.trim();
+            if (!numPedido) {
+              showToast('Informe o número do pedido', 'warning');
+              numPedInp?.focus();
+              return;
+            }
+          }
+
           const res = await onMutate('SAVE_PRODUCTION', {
             produtoId: prodId,
             quantidade: qty,
+            tipoDestino: selectedDest,
+            numeroPedido,
             origem: 'voz'
           });
           if (res.ok) {
@@ -264,6 +351,7 @@ function renderSectorItemCard(rec, prod, userMap, canBreak) {
           </div>
           <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
             ${renderStatusPill(s.statusTone, s.statusShort)}
+            ${rec.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(rec.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
             ${rec.produtoNaoCadastrado ? renderStatusPill('amber', '⚠️ Não cadastrado') : ''}
           </div>
         </div>
@@ -559,7 +647,20 @@ export function renderRegisterProductionView({ db, user, params = {}, navigate, 
                 <button type="button" class="chip preset-add" data-add="100">+100</button>
               </div>
 
-              <button type="submit" class="btn btn-success btn-block btn-lg">SALVAR PRODUÇÃO</button>
+              <div class="field" style="margin-top:14px;">
+                <label>Destino da Produção</label>
+                <div class="segmented-control" id="reg-destino-seg">
+                  <button type="button" class="segmented-btn active" data-dest="ESTOQUE">📦 Para Estoque</button>
+                  <button type="button" class="segmented-btn" data-dest="PEDIDO">📋 Para Pedido</button>
+                </div>
+              </div>
+
+              <div class="field" id="reg-box-pedido" style="display:none;">
+                <label for="reg-numpedido">Número do Pedido</label>
+                <input id="reg-numpedido" class="input" type="text" placeholder="Ex: 1045" style="font-size:1.15rem;font-weight:700;" />
+              </div>
+
+              <button type="submit" class="btn btn-success btn-block btn-lg" style="margin-top:16px;">SALVAR PRODUÇÃO</button>
             </form>
 
             <button type="button" class="btn btn-outline btn-block" id="btn-change-prod" style="margin-top:10px;">
@@ -570,6 +671,24 @@ export function renderRegisterProductionView({ db, user, params = {}, navigate, 
 
         const qtyInp = document.getElementById('qty-input');
         qtyInp?.focus();
+
+        let selectedDest = 'ESTOQUE';
+        const destBox = document.getElementById('reg-box-pedido');
+        const numPedInp = document.getElementById('reg-numpedido');
+
+        container.querySelectorAll('#reg-destino-seg .segmented-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            container.querySelectorAll('#reg-destino-seg .segmented-btn').forEach((b) => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedDest = btn.dataset.dest;
+            if (selectedDest === 'PEDIDO') {
+              destBox.style.display = 'block';
+              numPedInp?.focus();
+            } else {
+              destBox.style.display = 'none';
+            }
+          });
+        });
 
         container.querySelectorAll('.preset-add').forEach((btn) => {
           btn.addEventListener('click', () => {
@@ -590,9 +709,22 @@ export function renderRegisterProductionView({ db, user, params = {}, navigate, 
             showToast('Informe uma quantidade maior que zero', 'warning');
             return;
           }
+
+          let numPedido = null;
+          if (selectedDest === 'PEDIDO') {
+            numPedido = numPedInp?.value.trim();
+            if (!numPedido) {
+              showToast('Informe o número do pedido', 'warning');
+              numPedInp?.focus();
+              return;
+            }
+          }
+
           const res = await onMutate('SAVE_PRODUCTION', {
             produtoId: prod.id,
             quantidade: qty,
+            tipoDestino: selectedDest,
+            numeroPedido,
             origem: 'manual'
           });
           if (res.ok) {
@@ -649,7 +781,20 @@ export function renderFastProductionView({ db, user, params = {}, navigate, onMu
               <input id="fast-qty" type="number" min="1" step="any" inputmode="decimal" class="input input-qty" placeholder="0" required />
             </div>
 
-            <button type="submit" class="btn btn-success btn-block btn-lg">SALVAR</button>
+            <div class="field">
+              <label>Destino da Produção</label>
+              <div class="segmented-control" id="fast-destino-seg">
+                <button type="button" class="segmented-btn active" data-dest="ESTOQUE">📦 Estoque</button>
+                <button type="button" class="segmented-btn" data-dest="PEDIDO">📋 Pedido</button>
+              </div>
+            </div>
+
+            <div class="field" id="fast-box-pedido" style="display:none;">
+              <label for="fast-numpedido">Número do Pedido</label>
+              <input id="fast-numpedido" class="input" type="text" placeholder="Ex: 1045" style="font-weight:700;" />
+            </div>
+
+            <button type="submit" class="btn btn-success btn-block btn-lg" style="margin-top:14px;">SALVAR</button>
           </form>
         </div>
 
@@ -664,6 +809,23 @@ export function renderFastProductionView({ db, user, params = {}, navigate, onMu
       const qtyInp = document.getElementById('fast-qty');
       const preview = document.getElementById('fast-prod-preview');
       const listEl = document.getElementById('fast-session-list');
+      let selectedDest = 'ESTOQUE';
+      const destBox = document.getElementById('fast-box-pedido');
+      const numPedInp = document.getElementById('fast-numpedido');
+
+      document.querySelectorAll('#fast-destino-seg .segmented-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#fast-destino-seg .segmented-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedDest = btn.dataset.dest;
+          if (selectedDest === 'PEDIDO') {
+            destBox.style.display = 'block';
+            numPedInp?.focus();
+          } else {
+            destBox.style.display = 'none';
+          }
+        });
+      });
 
       document.getElementById('fast-back')?.addEventListener('click', () => {
         navigate(params.sector === SECTORS.PRE_MOLDADOS ? 'premoldados' : params.sector === SECTORS.MARCENARIA ? 'marcenaria' : 'inicio');
@@ -697,20 +859,43 @@ export function renderFastProductionView({ db, user, params = {}, navigate, onMu
           return;
         }
 
+        let numPedido = null;
+        if (selectedDest === 'PEDIDO') {
+          numPedido = numPedInp?.value.trim();
+          if (!numPedido) {
+            showToast('Informe o número do pedido', 'warning');
+            numPedInp?.focus();
+            return;
+          }
+        }
+
         const res = await onMutate('SAVE_PRODUCTION', {
           produtoId: prod.id,
           quantidade: qty,
+          tipoDestino: selectedDest,
+          numeroPedido,
           origem: 'rapida'
         });
 
         if (res.ok) {
           showToast(`✅ ${prod.nome} — ${qty} salvo!`);
-          sessionSaved.unshift({ nome: prod.nome, qty, unidade: prod.unidade, hora: res.record.hora });
+          sessionSaved.unshift({
+            nome: prod.nome,
+            qty,
+            unidade: prod.unidade,
+            hora: res.record.hora,
+            tipoDestino: selectedDest,
+            numeroPedido
+          });
           listEl.innerHTML = sessionSaved.map((item) => `
             <div class="card row-between" style="padding:12px 14px;">
               <div>
                 <div class="fw-800">${escapeHtml(item.nome)}</div>
-                <div class="text-muted" style="font-size:0.8rem;">${item.hora}</div>
+                <div class="text-muted" style="font-size:0.8rem;display:flex;gap:6px;align-items:center;margin-top:2px;">
+                  <span>${item.hora}</span>
+                  <span>•</span>
+                  <span>${item.tipoDestino === 'PEDIDO' ? `📋 Pedido #${escapeHtml(item.numeroPedido)}` : '📦 Estoque'}</span>
+                </div>
               </div>
               <span class="status-pill status-green">+${formatNumber(item.qty)} ${escapeHtml(item.unidade)}</span>
             </div>

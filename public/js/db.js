@@ -162,18 +162,22 @@ export async function removeOutboxOps(opIds) {
 
 export function getSavedSessionUserId() {
   try {
-    return localStorage.getItem(LS_SESSION_KEY) || null;
+    return sessionStorage.getItem(LS_SESSION_KEY) || localStorage.getItem(LS_SESSION_KEY) || null;
   } catch {
     return null;
   }
 }
 
-export function setSavedSessionUserId(userId) {
+export function setSavedSessionUserId(userId, remember = false) {
   try {
+    sessionStorage.removeItem(LS_SESSION_KEY);
+    localStorage.removeItem(LS_SESSION_KEY);
     if (userId) {
-      localStorage.setItem(LS_SESSION_KEY, userId);
-    } else {
-      localStorage.removeItem(LS_SESSION_KEY);
+      if (remember) {
+        localStorage.setItem(LS_SESSION_KEY, userId);
+      } else {
+        sessionStorage.setItem(LS_SESSION_KEY, userId);
+      }
     }
   } catch {
     // ignore

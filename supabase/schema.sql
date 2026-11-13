@@ -44,6 +44,8 @@ SELECT
   (r->>'quantidadeConferida')::numeric AS quantidade_conferida,
   r->>'data' AS data,
   r->>'hora' AS hora,
+  COALESCE(r->>'tipoDestino', 'ESTOQUE') AS tipo_destino,
+  r->>'numeroPedido' AS numero_pedido,
   r->>'status' AS status,
   r->>'usuarioId' AS usuario_id,
   r->>'origem' AS origem

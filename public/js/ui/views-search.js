@@ -93,7 +93,10 @@ export function renderSearchView({ db, user, params = {} }) {
                     <div class="text-muted" style="font-size:0.82rem;font-weight:700;">
                       📅 ${formatDateBR(rec.data)} ${rec.hora} • ${escapeHtml(resp)}
                     </div>
-                    <div style="margin-top:6px;">${renderStatusPill(s.statusTone, s.statusBadge)}</div>
+                    <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+                      ${renderStatusPill(s.statusTone, s.statusBadge)}
+                      ${rec.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(rec.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
+                    </div>
                   </div>
                 </div>
                 <div class="board-metrics">
@@ -260,7 +263,10 @@ export function renderHistoryView({ db, user }) {
                   <div style="font-size:0.75rem;font-weight:800;color:var(--text-muted);">${SECTOR_LABELS[r.setor]}</div>
                   <div class="fw-800" style="font-size:1.05rem;">${escapeHtml(prod?.nome || 'Produto')}</div>
                   <div class="text-muted" style="font-size:0.8rem;font-weight:700;">📅 ${formatDateBR(r.data)} ${r.hora} • ${escapeHtml(resp)}</div>
-                  <div style="margin-top:6px;">${renderStatusPill(s.statusTone, s.statusBadge)}</div>
+                  <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+                    ${renderStatusPill(s.statusTone, s.statusBadge)}
+                    ${r.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(r.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
+                  </div>
                 </div>
               </div>
               <div class="board-metrics">
@@ -398,7 +404,7 @@ export function renderReportsView({ db }) {
       });
 
       document.getElementById('rep-export-csv')?.addEventListener('click', () => {
-        const rows = [['Data', 'Hora', 'Setor', 'Codigo', 'Produto', 'Produzida', 'Quebrada', 'Aproveitavel', 'Conferida', 'Status']];
+        const rows = [['Data', 'Hora', 'Setor', 'Codigo', 'Produto', 'Destino', 'Pedido', 'Produzida', 'Quebrada', 'Aproveitavel', 'Conferida', 'Status']];
         for (const r of getFiltered()) {
           const p = getRecordProduct(r, prodMap);
           const s = computeProductionSummary(r);
@@ -408,6 +414,8 @@ export function renderReportsView({ db }) {
             r.setor,
             p?.codigo || '',
             `"${(p?.nome || '').replace(/"/g, '""')}"`,
+            r.tipoDestino === 'PEDIDO' ? 'PEDIDO' : 'ESTOQUE',
+            r.numeroPedido || '',
             s.produzida,
             s.quebrada,
             s.aproveitavel,

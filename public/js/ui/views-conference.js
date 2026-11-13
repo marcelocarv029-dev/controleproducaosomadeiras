@@ -47,6 +47,7 @@ export function renderConferenceView({ db, user, onMutate }) {
             </div>
             <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
               ${renderStatusPill(s.statusTone, s.statusBadge)}
+              ${rec.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(rec.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
             </div>
           </div>
         </div>
@@ -312,8 +313,9 @@ export function renderEntriesHistoryView({ db }) {
                   <div class="text-muted" style="font-size:0.82rem;font-weight:700;">
                     📅 ${formatDateBR(dt)} ${hr} • ${escapeHtml(resp)}
                   </div>
-                  <div style="margin-top:6px;">
+                  <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
                     ${renderStatusPill(s.statusTone, s.statusBadge)}
+                    ${r.tipoDestino === 'PEDIDO' ? renderStatusPill('blue', `📋 Pedido #${escapeHtml(r.numeroPedido || '')}`) : renderStatusPill('gray', '📦 Estoque')}
                   </div>
                 </div>
               </div>

@@ -115,7 +115,7 @@ function openNotificationsDrawer() {
   });
 }
 
-function handleLogin(username, password) {
+function handleLogin(username, password, remember = true) {
   const match = db.usuarios.find(
     (u) => u.usuario.toLowerCase() === username.toLowerCase() && u.senha === password
   );
@@ -131,7 +131,7 @@ function handleLogin(username, password) {
   }
   loginError = '';
   currentUser = match;
-  setSavedSessionUserId(match.id);
+  setSavedSessionUserId(match.id, remember);
   currentRoute = getDefaultRouteForUser(match);
   routeParams = {};
   render();

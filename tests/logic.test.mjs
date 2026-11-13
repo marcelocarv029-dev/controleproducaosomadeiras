@@ -549,3 +549,132 @@ test('server.mjs (Render) usa Supabase automaticamente quando variáveis estão 
   assert.equal(syncData.ok, true);
   assert.ok(storedRow.data.producoes.some((r) => r.produtoId === 'prd_rnd_1' && r.quantidade === 6));
 });
+
+test('Produção para Estoque vs Pedido: validação do número do pedido e persistência', () => {
+  const db = createTestDatabase();
+  const actor = db.usuarios[0];
+
+  // 1. Produção para Estoque (padrão)
+  const rEstoque = applySyncOp(db, {
+    opId: 'op_dest_estoque',
+    type: 'SAVE_PRODUCTION',
+    actorId: actor.id,
+    actorName: actor.nome,
+    payload: {
+      produtoId: 'prd_canaleta14',
+      quantidade: 50,
+      tipoDestino: 'ESTOQUE'
+    }
+  });
+  assert.equal(rEstoque.ok, true);
+  assert.equal(rEstoque.record.tipoDestino, 'ESTOQUE');
+  assert.equal(rEstoque.record.numeroPedido, null);
+
+  // 2. Produção para Pedido SEM número de pedido deve falhar com aviso claro
+  const rPedidoSemNumero = applySyncOp(db, {
+    opId: 'op_dest_ped_err',
+    type: 'SAVE_PRODUCTION',
+    actorId: actor.id,
+    actorName: actor.nome,
+    payload: {
+      produtoId: 'prd_canaleta14',
+      quantidade: 20,
+      tipoDestino: 'PEDIDO',
+      numeroPedido: ''
+    }
+  });
+  assert.equal(rPedidoSemNumero.ok, false);
+  assert.match(rPedidoSemNumero.error, /número do pedido/i);
+
+  // 3. Produção para Pedido COM número do pedido
+  const rPedidoOk = applySyncOp(db, {
+    opId: 'op_dest_ped_ok',
+    type: 'SAVE_PRODUCTION',
+    actorId: actor.id,
+    actorName: actor.nome,
+    payload: {
+      produtoId: 'prd_porta080',
+      quantidade: 4,
+      tipoDestino: 'PEDIDO',
+      numeroPedido: '1045'
+    }
+  });
+  assert.equal(rPedidoOk.ok, true);
+  assert.equal(rPedidoOk.record.tipoDestino, 'PEDIDO');
+  assert.equal(rPedidoOk.record.numeroPedido, '1045');
+
+  // 4. Produção não cadastrada para Pedido
+  const rUnregPedido = applySyncOp(db, {
+    opId: 'op_unreg_ped',
+    type: 'SAVE_UNREGISTERED_PRODUCTION',
+    actorId: actor.id,
+    actorName: actor.nome,
+    payload: {
+      nome: 'Armário Especial',
+      unidade: 'UN',
+      setor: SECTORS.MARCENARIA,
+      quantidade: 2,
+      tipoDestino: 'PEDIDO',
+      numeroPedido: '2088'
+    }
+  });
+  assert.equal(rUnregPedido.ok, true);
+  assert.equal(rUnregPedido.record.tipoDestino, 'PEDIDO');
+  assert.equal(rUnregPedido.record.numeroPedido, '2088');
+
+  // 5. Busca global encontra registro pelo número do pedido
+  const searchResult = executeGlobalSearch(db, '1045', actor);
+  assert.ok(searchResult.producoes.some((p) => p.numeroPedido === '1045'));
+});
+
+test('Gestão de Usuários no Painel Admin: Marcenaria, Pré-Moldados e permanência do Patrão', () => {
+  const db = createInitialDatabase();
+  const adminActor = db.usuarios.find((u) => u.perfil === ROLES.ADMIN);
+
+  // 1. Criar marceneiro
+  const rMarceneiro = applySyncOp(db, {
+    opId: 'op_usr_marceneiro',
+    type: 'SAVE_USER',
+    actorId: adminActor.id,
+    actorName: adminActor.nome,
+    payload: {
+      nome: 'Carlos Marceneiro',
+      usuario: 'carlos',
+      senha: '456',
+      perfil: ROLES.PRODUCAO,
+      setor: SECTORS.MARCENARIA,
+      ativo: true
+    }
+  });
+  assert.equal(rMarceneiro.ok, true);
+  assert.equal(rMarceneiro.usuario.setor, SECTORS.MARCENARIA);
+  assert.equal(rMarceneiro.usuario.perfil, ROLES.PRODUCAO);
+  assert.equal(getDefaultRouteForUser(rMarceneiro.usuario), 'marcenaria');
+
+  // 2. Criar operador pré-moldado
+  const rPreMoldado = applySyncOp(db, {
+    opId: 'op_usr_premoldado',
+    type: 'SAVE_USER',
+    actorId: adminActor.id,
+    actorName: adminActor.nome,
+    payload: {
+      nome: 'Marcos Premoldado',
+      usuario: 'marcos',
+      senha: '789',
+      perfil: ROLES.PRODUCAO,
+      setor: SECTORS.PRE_MOLDADOS,
+      ativo: true
+    }
+  });
+  assert.equal(rPreMoldado.ok, true);
+  assert.equal(rPreMoldado.usuario.setor, SECTORS.PRE_MOLDADOS);
+  assert.equal(rPreMoldado.usuario.perfil, ROLES.PRODUCAO);
+  assert.equal(getDefaultRouteForUser(rPreMoldado.usuario), 'premoldados');
+
+  // 3. Usuário do Patrão permanece intacto
+  const patrao = db.usuarios.find((u) => u.usuario === 'patrao');
+  assert.ok(patrao);
+  assert.equal(patrao.perfil, ROLES.PATRAO);
+  assert.equal(patrao.setor, 'AMBOS');
+  assert.equal(getDefaultRouteForUser(patrao), 'painel');
+});

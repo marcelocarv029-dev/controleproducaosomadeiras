@@ -517,10 +517,18 @@ export function parseVoiceProduction(rawTranscript, produtos, allowedSectors = n
 
   scored.sort((a, b) => b.score - a.score);
 
+  let parsedPedido = null;
+  const matchPedido = rawText.match(/\bpedidos?\s*(?:numero|n[ºo])?\s*(\d+)\b/i);
+  if (matchPedido) {
+    parsedPedido = matchPedido[1];
+  }
+
   if (scored.length === 0) {
     return {
       product: null,
       quantity: numberPositions[0]?.value ?? null,
+      tipoDestino: parsedPedido ? 'PEDIDO' : 'ESTOQUE',
+      numeroPedido: parsedPedido,
       confidence: 'none',
       rawText,
       candidates: []
@@ -540,6 +548,8 @@ export function parseVoiceProduction(rawTranscript, produtos, allowedSectors = n
   return {
     product: best.product,
     quantity: best.quantity,
+    tipoDestino: parsedPedido ? 'PEDIDO' : 'ESTOQUE',
+    numeroPedido: parsedPedido,
     confidence,
     rawText,
     candidates: scored.slice(0, 4).map((c) => c.product)
@@ -640,7 +650,8 @@ export function executeGlobalSearch(db, rawQuery, user = null) {
 
     const prod = getRecordProduct(rec, prodMap);
     const resp = userMap.get(rec.usuarioId);
-    const searchable = `${prod?.nome || ''} ${prod?.codigo || ''} ${SECTOR_SHORT[rec.setor]} ${resp?.nome || ''} ${s.statusBadge} ${rec.produtoNaoCadastrado ? 'nao cadastrado' : ''}`;
+    const destinoStr = rec.tipoDestino === 'PEDIDO' ? `pedido ${rec.numeroPedido || ''}` : 'estoque';
+    const searchable = `${prod?.nome || ''} ${prod?.codigo || ''} ${SECTOR_SHORT[rec.setor]} ${resp?.nome || ''} ${s.statusBadge} ${rec.produtoNaoCadastrado ? 'nao cadastrado' : ''} ${destinoStr}`;
     return matchesKeywords(searchable);
   }).sort((a, b) => `${b.data} ${b.hora}`.localeCompare(`${a.data} ${a.hora}`));
 
@@ -727,6 +738,12 @@ export function applySyncOp(db, op) {
       const qty = Number(p.quantidade);
       if (!Number.isFinite(qty) || qty <= 0) return { ok: false, error: 'Quantidade inválida' };
 
+      const tipoDestino = p.tipoDestino === 'PEDIDO' ? 'PEDIDO' : 'ESTOQUE';
+      const numeroPedido = tipoDestino === 'PEDIDO' ? String(p.numeroPedido || '').trim() : null;
+      if (tipoDestino === 'PEDIDO' && !numeroPedido) {
+        return { ok: false, error: 'Informe o número do pedido.' };
+      }
+
       const record = {
         id: p.id || generateId('prod_reg'),
         produtoId: produto.id,
@@ -735,6 +752,8 @@ export function applySyncOp(db, op) {
         quantidadeQuebrada: 0,
         quantidadeAproveitavel: qty,
         quantidadeConferida: null,
+        tipoDestino,
+        numeroPedido,
         data: p.data || getLocalDateStr(),
         hora: p.hora || getLocalTimeStr(),
         usuarioId: actorId,
@@ -746,20 +765,23 @@ export function applySyncOp(db, op) {
       db.producoes.unshift(record);
       addAuditLog(db, 'producao', record.id, 'CRIAR', actorId, actorName, null, {
         produto: produto.nome,
-        quantidade: qty
+        quantidade: qty,
+        tipoDestino,
+        numeroPedido
       });
+      const destinoTxt = tipoDestino === 'PEDIDO' ? ` (Pedido #${numeroPedido})` : ' (Estoque)';
       addNotification(
         db,
         'NOVA_PRODUCAO',
         '🔔 Nova produção registrada',
-        `${produto.nome}: ${qty} ${produto.unidade} (${SECTOR_SHORT[produto.setor]})`,
+        `${produto.nome}: ${qty} ${produto.unidade} (${SECTOR_SHORT[produto.setor]})${destinoTxt}`,
         record.id
       );
       addNotification(
         db,
         'AGUARDANDO_CONFERENCIA',
         '🔔 Produção aguardando conferência',
-        `${produto.nome} — ${qty} ${produto.unidade}`,
+        `${produto.nome} — ${qty} ${produto.unidade}${destinoTxt}`,
         record.id
       );
       result.record = record;
@@ -774,6 +796,12 @@ export function applySyncOp(db, op) {
       const setor = p.setor || SECTORS.MARCENARIA;
       const unidade = p.unidade || 'UN';
       const foto = p.foto || '';
+
+      const tipoDestino = p.tipoDestino === 'PEDIDO' ? 'PEDIDO' : 'ESTOQUE';
+      const numeroPedido = tipoDestino === 'PEDIDO' ? String(p.numeroPedido || '').trim() : null;
+      if (tipoDestino === 'PEDIDO' && !numeroPedido) {
+        return { ok: false, error: 'Informe o número do pedido.' };
+      }
 
       const record = {
         id: p.id || generateId('prod_reg'),
@@ -790,6 +818,8 @@ export function applySyncOp(db, op) {
         quantidadeQuebrada: 0,
         quantidadeAproveitavel: qty,
         quantidadeConferida: null,
+        tipoDestino,
+        numeroPedido,
         data: p.data || getLocalDateStr(),
         hora: p.hora || getLocalTimeStr(),
         usuarioId: actorId,
@@ -802,13 +832,16 @@ export function applySyncOp(db, op) {
       addAuditLog(db, 'producao', record.id, 'CRIAR_NAO_CADASTRADO', actorId, actorName, null, {
         produto: nome,
         quantidade: qty,
+        tipoDestino,
+        numeroPedido,
         produtoNaoCadastrado: true
       });
+      const destinoTxt = tipoDestino === 'PEDIDO' ? ` (Pedido #${numeroPedido})` : ' (Estoque)';
       addNotification(
         db,
         'PRODUTO_NAO_CADASTRADO',
         '⚠️ Produto novo aguardando cadastro',
-        `${nome}: ${qty} ${unidade} (${SECTOR_SHORT[setor]}) — cadastrar na Conferência`,
+        `${nome}: ${qty} ${unidade} (${SECTOR_SHORT[setor]})${destinoTxt} — cadastrar na Conferência`,
         record.id
       );
       result.record = record;
@@ -1046,12 +1079,18 @@ export function applySyncOp(db, op) {
         quantidadeQuebrada: rec.quantidadeQuebrada,
         quantidadeAproveitavel: rec.quantidadeAproveitavel,
         quantidadeConferida: rec.quantidadeConferida,
+        tipoDestino: rec.tipoDestino,
+        numeroPedido: rec.numeroPedido,
         status: rec.status
       };
 
       rec.quantidade = novaQtd;
       rec.quantidadeQuebrada = novaQuebra;
       rec.quantidadeAproveitavel = novaQtd - novaQuebra;
+      if (p.tipoDestino !== undefined) {
+        rec.tipoDestino = p.tipoDestino === 'PEDIDO' ? 'PEDIDO' : 'ESTOQUE';
+        rec.numeroPedido = rec.tipoDestino === 'PEDIDO' ? String(p.numeroPedido || '').trim() : null;
+      }
       if (p.quantidadeConferida !== undefined && p.quantidadeConferida !== null && p.quantidadeConferida !== '') {
         rec.quantidadeConferida = Number(p.quantidadeConferida);
       }

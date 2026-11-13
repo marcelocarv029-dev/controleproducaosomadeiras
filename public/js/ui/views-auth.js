@@ -23,25 +23,15 @@ export function renderLoginView({ onLogin, errorMsg = '' }) {
               <label for="login-pass">Senha</label>
               <input id="login-pass" class="input" type="password" placeholder="Digite sua senha" required autocomplete="current-password" />
             </div>
+            <div style="margin: 10px 0 16px; display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="login-remember" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--blue);" />
+              <label for="login-remember" style="margin: 0; font-size: 0.9rem; font-weight: 700; color: var(--text); cursor: pointer; user-select: none;">
+                Manter conectado
+              </label>
+            </div>
             ${errorMsg ? `<div class="div-alert" style="margin-bottom:12px;">${escapeHtml(errorMsg)}</div>` : ''}
             <button type="submit" class="btn btn-dark btn-block btn-lg">ENTRAR</button>
           </form>
-
-          <details style="margin-top:18px;border-top:1px solid var(--border);padding-top:12px;">
-            <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;color:var(--text-muted);">
-              Acessos iniciais (clique para testar perfis)
-            </summary>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-              <button type="button" class="btn btn-outline btn-sm quick-fill-btn" data-u="patrao" data-p="123">👔 Patrão</button>
-              <button type="button" class="btn btn-outline btn-sm quick-fill-btn" data-u="premoldados" data-p="123">🧱 Pré-Moldados</button>
-              <button type="button" class="btn btn-outline btn-sm quick-fill-btn" data-u="marcenaria" data-p="123">🪵 Marcenaria</button>
-              <button type="button" class="btn btn-outline btn-sm quick-fill-btn" data-u="conferencia" data-p="123">📋 Conferência</button>
-              <button type="button" class="btn btn-outline btn-sm quick-fill-btn" data-u="admin" data-p="123">⚙️ Admin</button>
-            </div>
-            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">
-              Senha padrão inicial: <strong>123</strong> (alterável pelo Administrador)
-            </div>
-          </details>
         </div>
       </div>
     `,
@@ -49,16 +39,11 @@ export function renderLoginView({ onLogin, errorMsg = '' }) {
       const form = document.getElementById('login-form');
       const userInp = document.getElementById('login-user');
       const passInp = document.getElementById('login-pass');
+      const remInp = document.getElementById('login-remember');
 
       form?.addEventListener('submit', (e) => {
         e.preventDefault();
-        onLogin(userInp.value.trim(), passInp.value);
-      });
-
-      document.querySelectorAll('.quick-fill-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          onLogin(btn.dataset.u, btn.dataset.p);
-        });
+        onLogin(userInp.value.trim(), passInp.value, remInp ? remInp.checked : true);
       });
     }
   };
@@ -76,6 +61,7 @@ export function renderHomeView({ user, navigate, onStartVoiceSearch }) {
     tiles.push({ route: 'entradas', icon: '📦', label: 'ENTRADAS', cls: '' });
     tiles.push({ route: 'relatorios', icon: '📊', label: 'RELATÓRIOS', cls: '' });
     tiles.push({ route: 'produtos', icon: '🏷️', label: 'PRODUTOS', cls: '' });
+    tiles.push({ route: 'usuarios', icon: '👥', label: 'USUÁRIOS', cls: 'accent-blue' });
     tiles.push({ route: 'configuracoes', icon: '⚙️', label: 'CONFIGURAÇÕES', cls: '' });
   } else if (user.perfil === ROLES.PRODUCAO) {
     if (canAccessModule(user, 'premoldados')) {

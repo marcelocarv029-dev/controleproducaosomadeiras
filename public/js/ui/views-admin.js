@@ -219,66 +219,91 @@ export function renderProductsView({ db, onMutate }) {
 
 export function renderUsersView({ db, onMutate }) {
   const openUserForm = (existing = null) => {
+    let currentTipo = 'PRE_MOLDADOS';
+    if (existing) {
+      if (existing.perfil === ROLES.PATRAO) currentTipo = 'PATRAO';
+      else if (existing.perfil === ROLES.ADMIN) currentTipo = 'ADMIN';
+      else if (existing.perfil === ROLES.CONFERENCIA) currentTipo = 'CONFERENCIA';
+      else if (existing.setor === SECTORS.MARCENARIA) currentTipo = 'MARCENARIA';
+      else currentTipo = 'PRE_MOLDADOS';
+    }
+
     openModal({
       title: existing ? '✏️ Editar Usuário' : '+ Novo Usuário',
       bodyHtml: `
         <form id="user-form">
           <div class="field">
             <label for="uf-nome">Nome completo</label>
-            <input id="uf-nome" class="input" type="text" required value="${escapeHtml(existing?.nome || '')}" placeholder="Ex: Pedro Silva" />
+            <input id="uf-nome" class="input" type="text" required value="${escapeHtml(existing?.nome || '')}" placeholder="Ex: João da Marcenaria" />
           </div>
           <div class="field">
             <label for="uf-usuario">Login (usuário)</label>
-            <input id="uf-usuario" class="input" type="text" required value="${escapeHtml(existing?.usuario || '')}" placeholder="Ex: pedro" />
+            <input id="uf-usuario" class="input" type="text" required value="${escapeHtml(existing?.usuario || '')}" placeholder="Ex: joao" autocomplete="off" />
           </div>
           <div class="field">
-            <label for="uf-senha">${existing ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}</label>
-            <input id="uf-senha" class="input" type="password" ${existing ? '' : 'required'} placeholder="••••" />
+            <label for="uf-senha">${existing ? 'Nova Senha (deixe em branco para manter a atual)' : 'Senha'}</label>
+            <input id="uf-senha" class="input" type="password" ${existing ? '' : 'required'} placeholder="${existing ? '••••' : 'Digite a senha'}" autocomplete="new-password" />
           </div>
-          <div class="grid-2">
-            <div class="field">
-              <label for="uf-perfil">Perfil</label>
-              <select id="uf-perfil" class="select">
-                ${Object.entries(ROLE_LABELS).map(([k, lbl]) => `
-                  <option value="${k}" ${existing?.perfil === k ? 'selected' : ''}>${lbl}</option>
-                `).join('')}
-              </select>
-            </div>
-            <div class="field">
-              <label for="uf-setor">Setor (Produção)</label>
-              <select id="uf-setor" class="select">
-                <option value="AMBOS" ${existing?.setor === 'AMBOS' ? 'selected' : ''}>Ambos</option>
-                <option value="${SECTORS.PRE_MOLDADOS}" ${existing?.setor === SECTORS.PRE_MOLDADOS ? 'selected' : ''}>Pré-Moldados</option>
-                <option value="${SECTORS.MARCENARIA}" ${existing?.setor === SECTORS.MARCENARIA ? 'selected' : ''}>Marcenaria</option>
-              </select>
+          <div class="field">
+            <label for="uf-tipo">Tipo / Setor do Usuário</label>
+            <select id="uf-tipo" class="select" style="font-weight:700;">
+              <option value="MARCENARIA" ${currentTipo === 'MARCENARIA' ? 'selected' : ''}>🪵 Marcenaria (Marceneiro / Produção)</option>
+              <option value="PRE_MOLDADOS" ${currentTipo === 'PRE_MOLDADOS' ? 'selected' : ''}>🧱 Pré-Moldados (Operador / Produção)</option>
+              <option value="PATRAO" ${currentTipo === 'PATRAO' ? 'selected' : ''}>👔 Patrão (Diretoria / Gestão)</option>
+              <option value="CONFERENCIA" ${currentTipo === 'CONFERENCIA' ? 'selected' : ''}>📋 Conferência (Conferente)</option>
+              <option value="ADMIN" ${currentTipo === 'ADMIN' ? 'selected' : ''}>⚙️ Administrador Geral</option>
+            </select>
+            <div style="font-size:0.8rem;color:var(--text-muted);font-weight:600;margin-top:4px;">
+              Define se o funcionário lança produções da Marcenaria ou dos Pré-Moldados.
             </div>
           </div>
           <div class="field">
-            <label for="uf-ativo">Situação</label>
+            <label for="uf-ativo">Situação da Conta</label>
             <select id="uf-ativo" class="select">
-              <option value="true" ${existing?.ativo !== false ? 'selected' : ''}>Ativo</option>
-              <option value="false" ${existing?.ativo === false ? 'selected' : ''}>Inativo</option>
+              <option value="true" ${existing?.ativo !== false ? 'selected' : ''}>🟢 Ativo (Acesso Liberado)</option>
+              <option value="false" ${existing?.ativo === false ? 'selected' : ''}>🔴 Inativo (Bloqueado)</option>
             </select>
           </div>
-          <button type="submit" class="btn btn-success btn-block btn-lg">SALVAR USUÁRIO</button>
+          <button type="submit" class="btn btn-success btn-block btn-lg" style="margin-top:16px;">SALVAR USUÁRIO</button>
         </form>
       `,
       onMount: () => {
         document.getElementById('user-form')?.addEventListener('submit', async (e) => {
           e.preventDefault();
+          const tipo = document.getElementById('uf-tipo').value;
+          let perfil = ROLES.PRODUCAO;
+          let setor = SECTORS.PRE_MOLDADOS;
+
+          if (tipo === 'MARCENARIA') {
+            perfil = ROLES.PRODUCAO;
+            setor = SECTORS.MARCENARIA;
+          } else if (tipo === 'PRE_MOLDADOS') {
+            perfil = ROLES.PRODUCAO;
+            setor = SECTORS.PRE_MOLDADOS;
+          } else if (tipo === 'PATRAO') {
+            perfil = ROLES.PATRAO;
+            setor = 'AMBOS';
+          } else if (tipo === 'CONFERENCIA') {
+            perfil = ROLES.CONFERENCIA;
+            setor = 'AMBOS';
+          } else if (tipo === 'ADMIN') {
+            perfil = ROLES.ADMIN;
+            setor = 'AMBOS';
+          }
+
           const payload = {
             id: existing?.id,
             nome: document.getElementById('uf-nome').value.trim(),
             usuario: document.getElementById('uf-usuario').value.trim(),
             senha: document.getElementById('uf-senha').value,
-            perfil: document.getElementById('uf-perfil').value,
-            setor: document.getElementById('uf-setor').value,
+            perfil,
+            setor,
             ativo: document.getElementById('uf-ativo').value === 'true'
           };
           const res = await onMutate('SAVE_USER', payload);
           if (res.ok) {
             closeModal();
-            showToast('✅ Usuário salvo');
+            showToast('✅ Usuário salvo com sucesso');
           } else {
             showToast(res.error || 'Erro ao salvar usuário', 'error');
           }
@@ -287,33 +312,46 @@ export function renderUsersView({ db, onMutate }) {
     });
   };
 
+  const getUserBadgeHtml = (u) => {
+    if (u.perfil === ROLES.PATRAO) return '<span class="status-pill status-green">👔 Patrão</span>';
+    if (u.perfil === ROLES.ADMIN) return '<span class="status-pill status-purple">⚙️ Admin</span>';
+    if (u.perfil === ROLES.CONFERENCIA) return '<span class="status-pill status-blue">📋 Conferência</span>';
+    if (u.setor === SECTORS.MARCENARIA) return '<span class="status-pill status-orange">🪵 Marcenaria</span>';
+    return '<span class="status-pill status-blue">🧱 Pré-Moldados</span>';
+  };
+
   return {
     html: `
       <div class="main-content main-narrow">
         <div class="page-header">
           <div>
             <h1 class="page-title">👥 USUÁRIOS</h1>
-            <div class="page-date">Acesso restrito — cadastro somente pelo Administrador</div>
+            <div class="page-date">Cadastro de acessos (Marcenaria, Pré-Moldados e Patrão)</div>
           </div>
-          <button type="button" class="btn btn-primary" id="btn-new-user">+ NOVO</button>
+          <button type="button" class="btn btn-primary" id="btn-new-user">+ NOVO USUÁRIO</button>
         </div>
 
         <div class="stack">
           ${db.usuarios.map((u) => {
             const used = db.producoes.some((r) => r.usuarioId === u.id || r.criadoPorId === u.id);
             return `
-              <div class="card row-between">
-                <div>
-                  <div class="fw-800">${escapeHtml(u.nome)} ${u.ativo === false ? '🔴 (Inativo)' : ''}</div>
-                  <div class="text-muted" style="font-size:0.85rem;font-weight:700;">
-                    @${escapeHtml(u.usuario)} • ${escapeHtml(ROLE_LABELS[u.perfil] || u.perfil)}
-                    ${u.perfil === ROLES.PRODUCAO ? ` • ${u.setor}` : ''}
+              <div class="card row-between" style="padding:14px;">
+                <div style="flex:1;min-width:0;margin-right:10px;">
+                  <div class="row-between" style="margin-bottom:4px;gap:8px;flex-wrap:wrap;">
+                    <span class="fw-800" style="font-size:1.02rem;">${escapeHtml(u.nome)}</span>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                      ${getUserBadgeHtml(u)}
+                      ${u.ativo === false ? '<span class="status-pill status-red">Inativo</span>' : ''}
+                    </div>
+                  </div>
+                  <div class="text-muted" style="font-size:0.86rem;font-weight:700;">
+                    Login: <strong>@${escapeHtml(u.usuario)}</strong>
                   </div>
                 </div>
                 <div style="display:flex;gap:6px;">
-                  <button type="button" class="btn btn-outline btn-sm btn-edit-usr" data-id="${u.id}">✏️</button>
-                  ${!used && u.id !== 'usr_admin' ? `
-                    <button type="button" class="btn btn-danger btn-sm btn-del-usr" data-id="${u.id}">🗑️</button>
+                  <button type="button" class="btn btn-outline btn-sm btn-edit-usr" data-id="${u.id}" title="Editar Usuário">✏️ Editar</button>
+                  ${!used && u.id !== 'usr_admin' && u.id !== 'usr_patrao' ? `
+                    <button type="button" class="btn btn-danger btn-sm btn-del-usr" data-id="${u.id}" title="Excluir">🗑️</button>
                   ` : ''}
                 </div>
               </div>
