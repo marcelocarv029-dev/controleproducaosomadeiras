@@ -1,5 +1,5 @@
 import { getOutboxOps, removeOutboxOps, saveLocalState } from './db.js';
-import { applySyncOp } from './logic.js';
+import { applySyncOp, purgeDemoData } from './logic.js';
 
 export const SYNC_STATUS = {
   SYNCED: 'SYNCED',
@@ -66,6 +66,7 @@ export function createSyncManager({ getState, setState, onStatusChange }) {
         await removeOutboxOps(doneIds);
 
         if (data.state) {
+          purgeDemoData(data.state);
           // Ensure any ops added while fetch was in flight are preserved
           const remaining = await getOutboxOps();
           for (const rem of remaining) {
@@ -84,6 +85,7 @@ export function createSyncManager({ getState, setState, onStatusChange }) {
         const data = await res.json();
         serverAvailable = true;
         if (data.state) {
+          purgeDemoData(data.state);
           const current = getState();
           // Only overwrite if server has newer updatedAt or different counts
           if (!current || data.state.updatedAt !== current.updatedAt) {

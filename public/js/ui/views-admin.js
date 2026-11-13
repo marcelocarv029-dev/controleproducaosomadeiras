@@ -512,7 +512,7 @@ export function renderCorrectionAndAuditView({ db, onMutate }) {
   };
 }
 
-export function renderSettingsView({ db, navigate, onSyncNow, onRestoreBackup }) {
+export function renderSettingsView({ db, navigate, onSyncNow, onRestoreBackup, onMutate }) {
   return {
     html: `
       <div class="main-content main-narrow">
@@ -535,6 +535,9 @@ export function renderSettingsView({ db, navigate, onSyncNow, onRestoreBackup })
           </button>
           <button type="button" class="btn btn-soft-blue btn-block" id="cfg-sync" style="justify-content:flex-start;">
             🔄 Sincronizar Agora com Servidor
+          </button>
+          <button type="button" class="btn btn-soft-amber btn-block" id="cfg-purge-demo" style="justify-content:flex-start;">
+            🧹 Eliminar Dados Fakes / Limpar Testes
           </button>
 
           <div class="card" style="margin-top:8px;">
@@ -562,6 +565,25 @@ export function renderSettingsView({ db, navigate, onSyncNow, onRestoreBackup })
       document.getElementById('cfg-sync')?.addEventListener('click', async () => {
         await onSyncNow();
         showToast('🔄 Verificação de sincronização concluída');
+      });
+
+      document.getElementById('cfg-purge-demo')?.addEventListener('click', () => {
+        confirmDangerousAction({
+          title: 'Eliminar Dados Fakes',
+          message: 'Deseja remover definitivamente todos os registros de demonstração/testes (produções, quebras e entradas fakes)?',
+          confirmLabel: 'Eliminar Fakes',
+          onConfirm: async () => {
+            if (onMutate) {
+              const res = await onMutate('PURGE_DEMO_DATA', {});
+              if (res.ok) {
+                await onSyncNow();
+                showToast('✅ Dados fakes eliminados com sucesso!');
+              } else {
+                showToast(res.error || 'Erro ao limpar dados fakes', 'error');
+              }
+            }
+          }
+        });
       });
 
       document.getElementById('cfg-backup')?.addEventListener('click', () => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createInitialDatabase } from './public/js/seed.js';
-import { applySyncOp } from './public/js/logic.js';
+import { applySyncOp, purgeDemoData } from './public/js/logic.js';
 import {
   getSupabaseConfig,
   loadSupabaseState,
@@ -45,7 +45,12 @@ export function loadOrCreateDb(dbFilePath = DB_FILE) {
   }
   try {
     const raw = fs.readFileSync(dbFilePath, 'utf8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const { changed } = purgeDemoData(parsed);
+    if (changed) {
+      saveDb(parsed, dbFilePath);
+    }
+    return parsed;
   } catch {
     const initial = createInitialDatabase();
     fs.writeFileSync(dbFilePath, JSON.stringify(initial, null, 2), 'utf8');

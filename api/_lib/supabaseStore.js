@@ -1,5 +1,5 @@
 import { createInitialDatabase } from '../../public/js/seed.js';
-import { applySyncOp } from '../../public/js/logic.js';
+import { applySyncOp, purgeDemoData } from '../../public/js/logic.js';
 
 const STATE_ID = 'main';
 
@@ -51,9 +51,19 @@ export async function loadSupabaseState(fetchImpl = globalThis.fetch, env = proc
 
   const rows = await res.json();
   if (rows.length > 0 && rows[0].data) {
+    const rawState = rows[0].data;
+    const { state, changed } = purgeDemoData(rawState);
+    const ver = Number(rows[0].version) || 1;
+    if (changed) {
+      try {
+        await saveSupabaseState(state, ver, fetchImpl, env);
+      } catch {
+        // ignora concorrência
+      }
+    }
     return {
-      state: rows[0].data,
-      version: Number(rows[0].version) || 1
+      state,
+      version: ver
     };
   }
 

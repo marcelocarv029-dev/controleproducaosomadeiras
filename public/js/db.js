@@ -1,5 +1,5 @@
 import { createInitialDatabase } from './seed.js';
-import { applySyncOp } from './logic.js';
+import { applySyncOp, purgeDemoData } from './logic.js';
 import { generateId } from './utils.js';
 
 const IDB_NAME = 'controle_producao_somadeiras';
@@ -75,38 +75,49 @@ async function idbDelete(storeName, key) {
   });
 }
 
-function isLegacyDemoData(data) {
-  return Boolean(data && data.version === 1 && Array.isArray(data.producoes) && data.producoes.some((r) => r.id === 'reg_hoje_1'));
-}
-
 export async function loadLocalState() {
+  let state = null;
   try {
     const data = await idbGet(STORE_STATE, 'main');
-    if (data && Array.isArray(data.usuarios) && Array.isArray(data.produtos) && !isLegacyDemoData(data)) {
-      return data;
+    if (data && Array.isArray(data.usuarios)) {
+      state = data;
     }
   } catch {
     // fallback to localStorage
   }
 
-  try {
-    const raw = localStorage.getItem(LS_FALLBACK_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.usuarios) && !isLegacyDemoData(parsed)) {
-        return parsed;
+  if (!state) {
+    try {
+      const raw = localStorage.getItem(LS_FALLBACK_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.usuarios)) {
+          state = parsed;
+        }
       }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
 
-  const initial = createInitialDatabase();
-  await saveLocalState(initial);
-  return initial;
+  if (!state) {
+    state = createInitialDatabase();
+  }
+
+  // Purga dados de demonstração/fake automaticamente
+  const { changed } = purgeDemoData(state);
+  if (changed || !state.version || state.version < 2) {
+    state.version = 2;
+    await saveLocalState(state);
+  }
+
+  return state;
 }
 
 export async function saveLocalState(state) {
+  if (state) {
+    purgeDemoData(state);
+  }
   try {
     localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(state));
   } catch {

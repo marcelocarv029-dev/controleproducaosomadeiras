@@ -19,7 +19,8 @@ import {
   applySyncOp,
   canEditEntry,
   canRegisterProduction,
-  getDefaultRouteForUser
+  getDefaultRouteForUser,
+  purgeDemoData
 } from '../public/js/logic.js';
 import { createAppServer } from '../server.mjs';
 import {
@@ -677,4 +678,58 @@ test('Gestão de Usuários no Painel Admin: Marcenaria, Pré-Moldados e permanê
   assert.equal(patrao.perfil, ROLES.PATRAO);
   assert.equal(patrao.setor, 'AMBOS');
   assert.equal(getDefaultRouteForUser(patrao), 'painel');
+});
+
+test('purgeDemoData: elimina definitivamente produções, quebras, entradas e notificações fakes', () => {
+  const dirtyState = {
+    version: 1,
+    usuarios: [
+      { id: 'usr_admin', nome: 'Admin', usuario: 'admin' },
+      { id: 'usr_pre', nome: 'suino', usuario: 'premoldados' },
+      { id: 'usr_suino_fake', nome: 'suino', usuario: 'suino' }
+    ],
+    produtos: [
+      { id: 'prd_canaleta14', nome: 'Canaleta 14' },
+      { id: 'prd_real_1', nome: 'Produto Real Cadastrado' }
+    ],
+    producoes: [
+      { id: 'reg_hoje_1', quantidade: 120 },
+      { id: 'reg_hoje_2', quantidade: 25 },
+      { id: 'reg_hoje_3', quantidade: 50 },
+      { id: 'prod_real_1', quantidade: 10 }
+    ],
+    quebras: [
+      { id: 'qbr_1', producaoId: 'reg_hoje_1' },
+      { id: 'qbr_real_1', producaoId: 'prod_real_1' }
+    ],
+    entradas: [
+      { id: 'ent_1', producaoId: 'reg_hoje_1' },
+      { id: 'ent_real_1', producaoId: 'prod_real_1' }
+    ],
+    notificacoes: [
+      { id: 'notif_1', refId: 'reg_hoje_2' }
+    ]
+  };
+
+  const { state, changed } = purgeDemoData(dirtyState);
+  assert.equal(changed, true);
+
+  // Produções fakes removidas, real mantida
+  assert.equal(state.producoes.length, 1);
+  assert.equal(state.producoes[0].id, 'prod_real_1');
+
+  // Quebras e entradas fakes removidas
+  assert.equal(state.quebras.length, 1);
+  assert.equal(state.quebras[0].id, 'qbr_real_1');
+  assert.equal(state.entradas.length, 1);
+  assert.equal(state.entradas[0].id, 'ent_real_1');
+  assert.equal(state.notificacoes.length, 0);
+
+  // Produto demo removido, produto real mantido
+  assert.equal(state.produtos.length, 1);
+  assert.equal(state.produtos[0].id, 'prd_real_1');
+
+  // Nome 'suino' restaurado para 'Produção Pré-Moldados' e usuário fake removido
+  assert.equal(state.usuarios.find((u) => u.id === 'usr_pre').nome, 'Produção Pré-Moldados');
+  assert.equal(state.usuarios.some((u) => u.id === 'usr_suino_fake'), false);
 });

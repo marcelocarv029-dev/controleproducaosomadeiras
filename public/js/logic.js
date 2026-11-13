@@ -40,6 +40,112 @@ export const ROLE_LABELS = {
 
 export const UNITS = ['UN', 'M', 'M²', 'KG', 'TON', 'JOGO', 'DÚZIA', 'PEÇA'];
 
+export const DEMO_PROD_IDS = new Set([
+  'reg_hoje_1', 'reg_hoje_2', 'reg_hoje_3', 'reg_hoje_4', 'reg_hoje_5',
+  'reg_ontem_1', 'reg_ontem_2', 'reg_2dias_1'
+]);
+export const DEMO_QUEBRA_IDS = new Set(['qbr_1', 'qbr_2', 'qbr_3']);
+export const DEMO_ENTRADA_IDS = new Set(['ent_1', 'ent_2', 'ent_3', 'ent_4', 'ent_5', 'ent_6']);
+export const DEMO_NOTIF_IDS = new Set(['notif_1', 'notif_2']);
+export const DEMO_PRODUCT_IDS = new Set([
+  'prd_canaleta14', 'prd_canaleta19', 'prd_manilha30', 'prd_estaca2m', 'prd_bloco14',
+  'prd_porta080', 'prd_janela', 'prd_aduela', 'prd_alisar', 'prd_mesa', 'prd_cadeira', 'prd_banco'
+]);
+
+export function purgeDemoData(state) {
+  if (!state || typeof state !== 'object') return { state, changed: false };
+  let changed = false;
+
+  if (Array.isArray(state.producoes)) {
+    const before = state.producoes.length;
+    state.producoes = state.producoes.filter((r) => {
+      if (!r || !r.id) return false;
+      if (DEMO_PROD_IDS.has(r.id)) return false;
+      if (typeof r.id === 'string' && (r.id.startsWith('reg_hoje') || r.id.startsWith('reg_ontem') || r.id.startsWith('reg_2dias'))) return false;
+      return true;
+    });
+    if (state.producoes.length !== before) changed = true;
+  }
+
+  if (Array.isArray(state.quebras)) {
+    const before = state.quebras.length;
+    state.quebras = state.quebras.filter((q) => {
+      if (!q || !q.id) return false;
+      if (DEMO_QUEBRA_IDS.has(q.id)) return false;
+      if (DEMO_PROD_IDS.has(q.producaoId)) return false;
+      return true;
+    });
+    if (state.quebras.length !== before) changed = true;
+  }
+
+  if (Array.isArray(state.entradas)) {
+    const before = state.entradas.length;
+    state.entradas = state.entradas.filter((e) => {
+      if (!e || !e.id) return false;
+      if (DEMO_ENTRADA_IDS.has(e.id)) return false;
+      if (DEMO_PROD_IDS.has(e.producaoId)) return false;
+      return true;
+    });
+    if (state.entradas.length !== before) changed = true;
+  }
+
+  if (Array.isArray(state.notificacoes)) {
+    const before = state.notificacoes.length;
+    state.notificacoes = state.notificacoes.filter((n) => {
+      if (!n || !n.id) return false;
+      if (DEMO_NOTIF_IDS.has(n.id)) return false;
+      if (DEMO_PROD_IDS.has(n.refId)) return false;
+      return true;
+    });
+    if (state.notificacoes.length !== before) changed = true;
+  }
+
+  if (Array.isArray(state.produtos)) {
+    const before = state.produtos.length;
+    state.produtos = state.produtos.filter((p) => !p || !DEMO_PRODUCT_IDS.has(p.id));
+    if (state.produtos.length !== before) changed = true;
+  }
+
+  if (Array.isArray(state.usuarios)) {
+    for (const u of state.usuarios) {
+      if (u && u.id === 'usr_pre') {
+        if (String(u.nome).toLowerCase().includes('suino') || String(u.usuario).toLowerCase().includes('suino')) {
+          u.nome = 'Produção Pré-Moldados';
+          u.usuario = 'premoldados';
+          changed = true;
+        }
+      }
+      if (u && u.id === 'usr_conf') {
+        if (u.nome === 'Carlos Conferente') {
+          u.nome = 'Conferente';
+          changed = true;
+        }
+      }
+      if (u && u.id === 'usr_mar') {
+        if (u.nome === 'Marcos (Marcenaria)') {
+          u.nome = 'Produção Marcenaria';
+          changed = true;
+        }
+      }
+    }
+    const beforeUsrs = state.usuarios.length;
+    state.usuarios = state.usuarios.filter((u) => {
+      if (!u) return false;
+      if (u.id !== 'usr_pre' && (String(u.nome).toLowerCase() === 'suino' || String(u.usuario).toLowerCase() === 'suino')) {
+        return false;
+      }
+      return true;
+    });
+    if (state.usuarios.length !== beforeUsrs) changed = true;
+  }
+
+  if (changed) {
+    state.updatedAt = new Date().toISOString();
+  }
+
+  return { state, changed };
+}
+
 export const PROD_STATUS = {
   PRODUZIDO: 'PRODUZIDO',
   CONFERIDO: 'CONFERIDO',
@@ -1223,6 +1329,12 @@ export function applySyncOp(db, op) {
       for (const n of db.notificacoes || []) {
         n.lida = true;
       }
+      break;
+    }
+
+    case 'PURGE_DEMO_DATA': {
+      purgeDemoData(db);
+      addAuditLog(db, 'sistema', 'demo', 'PURGE_DEMO', actorId, actorName, null, { limpo: true });
       break;
     }
 
